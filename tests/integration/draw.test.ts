@@ -147,6 +147,16 @@ describe("completeDraw", () => {
     expect(result.participantId).toBe(fixture.eligibleIds[0]);
   });
 
+  it("records the request and the committed result in the audit chain", async () => {
+    const fixture = await createRaffleFixture(database, { participants: 6, quantity: 1 });
+    const result = await drawOnce(fixture);
+    const entries = await database.auditLog.findMany({ where: { entityType: "draw", entityId: result.drawId }, orderBy: { seq: "asc" } });
+    expect(entries.map((entry) => entry.action)).toEqual(["draw.requested", "draw.committed"]);
+    const committed = JSON.parse(entries[1]?.payload ?? "{}") as Record<string, unknown>;
+    expect(committed).toMatchObject({ participantId: result.participantId, beaconRound: fixtureBeacon.round.toString(), selectedIndex: result.selectedIndex });
+    expect(JSON.stringify(committed)).not.toContain(Buffer.from(fixture.serverSeed).toString("hex"));
+  });
+
   it("fills every slot once without repeating a winner, then reports exhaustion and an empty pool", async () => {
     const fixture = await createRaffleFixture(database, { participants: 3, quantity: 3, repeatWinners: "never" });
     const results: CommittedDraw[] = [];

@@ -34,3 +34,8 @@ npm run db:test:down
 2. Apply migrations to Neon: `npm run db:migrate`.
 3. In Vercel, add the same four variables (with a separate encryption key and the Vercel `APP_URL`) for the Production environment.
 4. Deploy. `npm run build` runs `prisma generate` before `next build`.
+5. Create the administrator once: `npm run admin:bootstrap`. It asks for the password twice without echoing it and refuses to run if an administrator already exists.
+
+## Administrator recovery
+
+If the password is lost, run `npm run admin:bootstrap -- --reset` with database access. It replaces the password, signs out every session and records the reset in the audit log.

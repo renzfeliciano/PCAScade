@@ -15,8 +15,11 @@ Fill in `.env.local` as described in [docs/setup/environment.md](docs/setup/envi
 
 ```powershell
 npm run db:migrate
+npm run admin:bootstrap
 npm run dev
 ```
+
+Sign in at `/admin/login`.
 
 ## Scripts
 
@@ -29,8 +32,15 @@ npm run dev
 | `npm run db:migrate:create -- --name <name>` | Create a new migration without applying it |
 | `npm run db:test:up` / `npm run db:test:down` | Start or stop the local test PostgreSQL container |
 | `npm test` | Unit and integration tests |
+| `npm run admin:bootstrap` | Create the single administrator (`-- --reset` to replace a lost password) |
+| `npm run db:verify` | Check concurrent draws and the drand beacon against the database in `.env.local` |
+| `npm run smoke:http` | HTTP checks against a running build (`SMOKE_BASE_URL`, `SMOKE_ADMIN_PASSWORD`) |
+| `npx tsx tests/e2e/make-import-fixtures.mts <dir>` | Write a messy sample `.xlsx` and photo `.zip` for trying the import wizard |
 
 ## Docs
 
 - [Architecture review](docs/architecture/architecture-review.html)
 - [Environment variables](docs/setup/environment.md)
+- [Phase 0 report](docs/phases/phase-0-report.md)
+- [Phase 1 report](docs/phases/phase-1-report.md)
+- [Phase 2A report](docs/phases/phase-2a-report.md)

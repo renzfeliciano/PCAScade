@@ -27,6 +27,51 @@ enum MediaKind {
   EVENT_LOGO
 }
 
+enum MediaStatus {
+  STAGED
+  ACTIVE
+}
+
+enum ParticipantFieldType {
+  TEXT
+  NUMBER
+  DATE
+  BOOLEAN
+  SINGLE_SELECT
+  MULTI_SELECT
+}
+
+enum ImportKind {
+  PARTICIPANTS
+  PRIZES
+}
+
+enum ImportStatus {
+  STAGED
+  VALIDATED
+  COMMITTED
+  CANCELLED
+  REVERTED
+}
+
+enum DuplicateMode {
+  SKIP
+  UPDATE
+  REJECT
+}
+
+enum ImportRowAction {
+  CREATE
+  UPDATE
+  SKIP
+  INVALID
+}
+
+enum PrizeStatus {
+  AVAILABLE
+  WITHDRAWN
+}
+
 enum PreparationStatus {
   DRAFT
   FROZEN
@@ -43,18 +88,78 @@ enum DrawStatus {
   VOIDED
 }
 
+model AdminUser {
+  id                Int            @id @db.SmallInt
+  passwordHash      String         @map("password_hash")
+  passwordChangedAt DateTime       @map("password_changed_at") @db.Timestamptz(3)
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  sessions          AdminSession[]
+
+  @@map("admin_user")
+}
+
+model AdminSession {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  adminId     Int       @map("admin_id") @db.SmallInt
+  tokenSha256 Bytes     @unique @map("token_sha256")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt  DateTime  @map("last_seen_at") @db.Timestamptz(3)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(3)
+  admin       AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("admin_session")
+}
+
+model LoginAttempt {
+  id        BigInt   @id @default(autoincrement())
+  clientKey Bytes    @map("client_key")
+  succeeded Boolean
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([clientKey, createdAt])
+  @@index([createdAt])
+  @@map("login_attempt")
+}
+
+model AuditLog {
+  seq        BigInt   @id @default(autoincrement())
+  eventId    String?  @map("event_id") @db.Uuid
+  actor      String
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  payload    String
+  createdAt  DateTime @map("created_at") @db.Timestamptz(3)
+  prevHash   Bytes    @unique @map("prev_hash")
+  hash       Bytes    @unique
+
+  @@index([eventId, seq])
+  @@index([entityType, entityId])
+  @@map("audit_log")
+}
+
 model Event {
-  id           String              @id @default(uuid(7)) @db.Uuid
-  slug         String              @unique
-  name         String
-  status       EventStatus         @default(DRAFT)
-  startsAt     DateTime?           @map("starts_at") @db.Timestamptz(3)
-  createdAt    DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  participants Participant[]
-  prizes       Prize[]
-  mediaAssets  MediaAsset[]
-  preparations RafflePreparation[]
+  id                 String              @id @default(uuid(7)) @db.Uuid
+  slug               String              @unique
+  name               String
+  status             EventStatus         @default(DRAFT)
+  description        String?
+  venue              String?
+  welcomeMessage     String?             @map("welcome_message")
+  accent             String              @default("safety-amber")
+  participantDisplay Json                @default("{\"department\":true,\"jobTitle\":true,\"bio\":false,\"photo\":true}") @map("participant_display")
+  startsAt           DateTime?           @map("starts_at") @db.Timestamptz(3)
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  participants       Participant[]
+  participantFields  ParticipantField[]
+  importBatches      ImportBatch[]
+  prizeCategories    PrizeCategory[]
+  prizes             Prize[]
+  mediaAssets        MediaAsset[]
+  preparations       RafflePreparation[]
 
   @@map("event")
 }
@@ -80,25 +185,99 @@ model Participant {
 
   @@unique([eventId, externalId])
   @@index([eventId, eligible, status])
+  @@index([eventId, fullName])
   @@map("participant")
 }
 
+model ParticipantField {
+  id        String               @id @default(uuid(7)) @db.Uuid
+  eventId   String               @map("event_id") @db.Uuid
+  key       String
+  label     String
+  type      ParticipantFieldType
+  required  Boolean              @default(false)
+  options   Json                 @default("[]")
+  isPublic  Boolean              @default(false) @map("is_public")
+  sortOrder Int                  @map("sort_order")
+  createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  event     Event                @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, key])
+  @@map("participant_field")
+}
+
+model ImportBatch {
+  id            String        @id @default(uuid(7)) @db.Uuid
+  eventId       String        @map("event_id") @db.Uuid
+  kind          ImportKind
+  status        ImportStatus  @default(STAGED)
+  duplicateMode DuplicateMode @map("duplicate_mode")
+  fileName      String        @map("file_name")
+  fileSha256    Bytes         @map("file_sha256")
+  sheetName     String?       @map("sheet_name")
+  columnMapping Json          @map("column_mapping")
+  photoRule     Json          @map("photo_rule")
+  rowCount      Int           @default(0) @map("row_count")
+  createCount   Int           @default(0) @map("create_count")
+  updateCount   Int           @default(0) @map("update_count")
+  skipCount     Int           @default(0) @map("skip_count")
+  invalidCount  Int           @default(0) @map("invalid_count")
+  warningCount  Int           @default(0) @map("warning_count")
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  validatedAt   DateTime?     @map("validated_at") @db.Timestamptz(3)
+  committedAt   DateTime?     @map("committed_at") @db.Timestamptz(3)
+  cancelledAt   DateTime?     @map("cancelled_at") @db.Timestamptz(3)
+  revertedAt    DateTime?     @map("reverted_at") @db.Timestamptz(3)
+  event         Event         @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  rows          ImportRow[]
+  media         MediaAsset[]
+
+  @@index([eventId, createdAt])
+  @@map("import_batch")
+}
+
+model ImportRow {
+  id            BigInt           @id @default(autoincrement())
+  batchId       String           @map("batch_id") @db.Uuid
+  rowNumber     Int              @map("row_number")
+  raw           Json
+  normalized    Json?
+  errors        Json             @default("[]")
+  warnings      Json             @default("[]")
+  action        ImportRowAction?
+  participantId String?          @map("participant_id") @db.Uuid
+  photoRef      String?          @map("photo_ref")
+  photoAssetId  String?          @map("photo_asset_id") @db.Uuid
+  beforeImage   Json?            @map("before_image")
+  batch         ImportBatch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, action])
+  @@map("import_row")
+}
+
 model MediaAsset {
-  id           String        @id @default(uuid(7)) @db.Uuid
-  eventId      String        @map("event_id") @db.Uuid
-  kind         MediaKind
-  mimeType     String        @map("mime_type")
-  byteSize     Int           @map("byte_size")
-  width        Int
-  height       Int
-  sha256       Bytes
-  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  event        Event         @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  blob         MediaBlob?
-  participants Participant[] @relation("ParticipantPhoto")
-  prizes       Prize[]       @relation("PrizePhoto")
+  id            String        @id @default(uuid(7)) @db.Uuid
+  eventId       String        @map("event_id") @db.Uuid
+  kind          MediaKind
+  mimeType      String        @map("mime_type")
+  byteSize      Int           @map("byte_size")
+  width         Int
+  height        Int
+  sha256        Bytes
+  status        MediaStatus   @default(ACTIVE)
+  importBatchId String?       @map("import_batch_id") @db.Uuid
+  originalName  String?       @map("original_name")
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  event         Event         @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  importBatch   ImportBatch?  @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  blob          MediaBlob?
+  participants  Participant[] @relation("ParticipantPhoto")
+  prizes        Prize[]       @relation("PrizePhoto")
 
   @@index([eventId, kind])
+  @@index([importBatchId])
   @@map("media_asset")
 }
 
@@ -110,20 +289,40 @@ model MediaBlob {
   @@map("media_blob")
 }
 
+model PrizeCategory {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  eventId     String   @map("event_id") @db.Uuid
+  name        String
+  slug        String
+  description String?
+  sceneKey    String   @map("scene_key")
+  sortOrder   Int      @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  prizes      Prize[]
+
+  @@unique([eventId, slug])
+  @@map("prize_category")
+}
+
 model Prize {
-  id              String      @id @default(uuid(7)) @db.Uuid
-  eventId         String      @map("event_id") @db.Uuid
+  id              String         @id @default(uuid(7)) @db.Uuid
+  eventId         String         @map("event_id") @db.Uuid
+  categoryId      String?        @map("category_id") @db.Uuid
   code            String
   name            String
   description     String?
   quantity        Int
-  drawOrder       Int         @map("draw_order")
-  eligibilityRule Json        @default("{}") @map("eligibility_rule")
-  photoId         String?     @map("photo_id") @db.Uuid
-  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
-  event           Event       @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  photo           MediaAsset? @relation("PrizePhoto", fields: [photoId], references: [id], onDelete: SetNull)
+  drawOrder       Int            @map("draw_order")
+  status          PrizeStatus    @default(AVAILABLE)
+  eligibilityRule Json           @default("{}") @map("eligibility_rule")
+  photoId         String?        @map("photo_id") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  event           Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  category        PrizeCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  photo           MediaAsset?    @relation("PrizePhoto", fields: [photoId], references: [id], onDelete: SetNull)
   draws           Draw[]
 
   @@unique([eventId, code])

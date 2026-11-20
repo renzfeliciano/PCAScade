@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import type { Db } from "@/lib/db";
+import { appendAudit } from "@/modules/audit/server/audit-log";
 import { type BeaconRound, QUICKNET, roundAt } from "@/modules/beacon/drand";
 import { bytesEqual, rosterDigest, seedCommitment } from "@/modules/raffle/domain/roster";
 import { candidateListDigest, deriveSelectionKey, selectIndex, sortCandidates } from "@/modules/raffle/domain/select";
@@ -202,6 +203,20 @@ export async function requestDraw(database: Db, input: RequestDrawInput): Promis
       if (preparation.status === "FROZEN") {
         await tx.rafflePreparation.update({ where: { id: preparation.id }, data: { status: "DRAWING" } });
       }
+      await appendAudit(tx, {
+        eventId: preparation.eventId,
+        actor: "admin",
+        action: "draw.requested",
+        entityType: "draw",
+        entityId: draw.id,
+        payload: {
+          preparationId: preparation.id,
+          prizeId: prize.id,
+          slotNumber: draw.slotNumber,
+          sequence: draw.sequence,
+          targetRound: draw.beaconRound,
+        },
+      });
       return toState(draw, false);
     }, TX_OPTIONS);
   } catch (error) {
@@ -273,6 +288,24 @@ export async function completeDraw(database: Db, input: CompleteDrawInput): Prom
         preparationId: preparation.id,
         participantId,
         exclusivityKey: preparation.rules.repeatWinners === "never" ? participantId : null,
+      },
+    });
+    await appendAudit(tx, {
+      eventId: preparation.eventId,
+      actor: "admin",
+      action: "draw.committed",
+      entityType: "draw",
+      entityId: draw.id,
+      payload: {
+        preparationId: preparation.id,
+        prizeId: draw.prizeId,
+        slotNumber: draw.slotNumber,
+        sequence: draw.sequence,
+        beaconRound: input.beacon.round,
+        candidateCount: candidates.length,
+        candidateListSha256: candidateListSha256,
+        selectedIndex: index,
+        participantId,
       },
     });
     const stored = await tx.draw.findUniqueOrThrow({ where: { id: draw.id }, include: drawWithWinner });
