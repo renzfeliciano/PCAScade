@@ -1,0 +1,6 @@
+.env*
+!.env.example
+tests
+docs
+docker-compose.yml
+coverage

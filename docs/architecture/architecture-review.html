@@ -1,0 +1,743 @@
+<title>PCASCADE Architecture Review</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: single reading column with a sticky section index on wide screens; construction-document feel (sheet numbers, revision block). */
+:root {
+  --bg: #f3f2ef;
+  --surface: #fbfaf8;
+  --fg: #1f2124;
+  --muted: #5d6066;
+  --rule: #d8d5cf;
+  --accent: #b5600b;
+  --accent-soft: #f6e6d3;
+  --ok: #2f7a43;
+  --warn: #9a6a00;
+  --bad: #b3261e;
+  --code-bg: #ebe9e4;
+  --f-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17181a; --surface: #1e2023; --fg: #e8e6e1; --muted: #a3a29d; --rule: #34363a;
+    --accent: #f0a04b; --accent-soft: #3a2a17; --ok: #6cc486; --warn: #e2b54a; --bad: #f08a80; --code-bg: #26282c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #17181a; --surface: #1e2023; --fg: #e8e6e1; --muted: #a3a29d; --rule: #34363a;
+  --accent: #f0a04b; --accent-soft: #3a2a17; --ok: #6cc486; --warn: #e2b54a; --bad: #f08a80; --code-bg: #26282c;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--f-body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 80px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
+@media (max-width: 900px) { .wrap { grid-template-columns: minmax(0, 1fr); gap: 24px; } nav.toc { position: static !important; } }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; font-size: 13px; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+nav.toc a { color: var(--muted); text-decoration: none; display: grid; grid-template-columns: 2.2em 1fr; padding: 3px 0; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--accent); }
+nav.toc .n { font-family: var(--f-mono); font-size: 12px; }
+main { min-width: 0; }
+header.doc { border: 1px solid var(--rule); background: var(--surface); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0; margin-bottom: 40px; }
+header.doc .t { padding: 24px; border-right: 1px solid var(--rule); }
+header.doc h1 { font: 700 34px/1.1 var(--f-display); margin: 0 0 8px; text-wrap: balance; letter-spacing: -0.01em; }
+header.doc .tag { color: var(--muted); margin: 0; }
+header.doc dl { margin: 0; display: grid; grid-template-columns: auto auto; font-size: 12.5px; }
+header.doc dt, header.doc dd { margin: 0; padding: 8px 14px; border-bottom: 1px solid var(--rule); }
+header.doc dt { color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 11px; padding-top: 10px; }
+header.doc dd { font-family: var(--f-mono); }
+@media (max-width: 640px) { header.doc { grid-template-columns: minmax(0, 1fr); } header.doc .t { border-right: 0; border-bottom: 1px solid var(--rule); } }
+section { padding-block: 8px 28px; border-top: 2px solid var(--fg); margin-top: 28px; }
+h2 { font: 700 24px/1.2 var(--f-display); margin: 14px 0 14px; display: flex; gap: 14px; align-items: baseline; text-wrap: balance; }
+h2 .sheet { font: 500 12px var(--f-mono); color: var(--accent); border: 1px solid var(--accent); padding: 2px 6px; letter-spacing: 0.04em; }
+h3 { font: 700 17px/1.3 var(--f-display); margin: 26px 0 8px; }
+p, li { max-width: 72ch; }
+a { color: var(--accent); }
+code { font: 0.88em var(--f-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+pre.code { font: 12.5px/1.55 var(--f-mono); background: var(--code-bg); padding: 16px; overflow-x: auto; border-radius: 4px; }
+.tbl { overflow-x: auto; margin: 12px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+th { font: 600 11px var(--f-body); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); border-bottom: 1.5px solid var(--fg); white-space: nowrap; }
+td code { white-space: nowrap; }
+.pill { display: inline-block; font: 600 11px var(--f-body); padding: 1px 8px; border-radius: 99px; border: 1px solid currentColor; white-space: nowrap; }
+.ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+.callout { border-left: 4px solid var(--accent); background: var(--accent-soft); padding: 14px 18px; margin: 16px 0; }
+.callout p { margin: 4px 0; }
+.callout strong { font-family: var(--f-display); }
+.diagram { background: var(--surface); border: 1px solid var(--rule); padding: 16px; overflow-x: auto; margin: 14px 0; }
+.diagram pre.mermaid { margin: 0; background: transparent; }
+.cap { font-size: 12.5px; color: var(--muted); margin-top: -6px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.card { border: 1px solid var(--rule); background: var(--surface); padding: 14px 16px; min-width: 0; }
+.card h4 { font: 700 14px var(--f-display); margin: 0 0 6px; }
+.card p, .card ul { margin: 0; font-size: 13.5px; }
+.card ul { padding-left: 18px; }
+ol.decisions { padding-left: 0; list-style: none; counter-reset: d; display: grid; gap: 10px; }
+ol.decisions li { counter-increment: d; border: 1px solid var(--rule); background: var(--surface); padding: 12px 16px 12px 56px; position: relative; max-width: none; }
+ol.decisions li::before { content: "D" counter(d); position: absolute; left: 14px; top: 12px; font: 700 13px var(--f-mono); color: var(--accent); }
+.small { font-size: 12.5px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+<nav class="toc" aria-label="Sections">
+  <ol>
+    <li><a href="#s1"><span class="n">01</span>Repository</a></li>
+    <li><a href="#s2"><span class="n">02</span>Current architecture</a></li>
+    <li><a href="#s3"><span class="n">03</span>Proposed architecture</a></li>
+    <li><a href="#s4"><span class="n">04</span>Folder structure</a></li>
+    <li><a href="#s5"><span class="n">05</span>Database &amp; ERD</a></li>
+    <li><a href="#s6"><span class="n">06</span>Route map</a></li>
+    <li><a href="#s7"><span class="n">07</span>Data flows</a></li>
+    <li><a href="#s8"><span class="n">08</span>Security</a></li>
+    <li><a href="#s9"><span class="n">09</span>Deployment feasibility</a></li>
+    <li><a href="#s10"><span class="n">10</span>Roadmap</a></li>
+    <li><a href="#s11"><span class="n">11</span>Risk register</a></li>
+    <li><a href="#s12"><span class="n">12</span>Decisions</a></li>
+    <li><a href="#src"><span class="n">--</span>Sources</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="doc">
+  <div class="t">
+    <h1>PCASCADE Architecture Review</h1>
+    <p class="tag">Every Reveal Builds Excitement. Technical architecture proposal for the single-administrator, construction-themed raffle platform. Nothing is implemented until this is approved.</p>
+  </div>
+  <dl>
+    <dt>Revision</dt><dd>C · D1 D2 D12 decided</dd>
+    <dt>Date</dt><dd>2026-11-20</dd>
+    <dt>Status</dt><dd>Awaiting approval</dd>
+    <dt>Host</dt><dd>Vercel Hobby*</dd>
+    <dt>Repo</dt><dd>empty (0 commits)</dd>
+  </dl>
+</header>
+
+<div class="callout">
+  <p><strong>Read first.</strong> Three things block implementation:</p>
+  <ol>
+    <li><b>Vercel Hobby is for "personal or non-commercial use" only.</b> A raffle run for PCAS, Inc. by staff or a paid contractor may count as commercial. We need written confirmation from Vercel before go-live, or a fallback (D1).</li>
+    <li><b>Resets are unlimited (decided 2026-11-20).</b> This overrides the amendment's no-reroll rule. Every reset is still recorded with a reason and shown publicly, and the integrity claims in the docs and on the verify page are reduced to match (§7.5).</li>
+    <li><b>The project folder.</b> This session can't write to <code>C:\Users\Renzo Payod</code>, so the repo isn't cloned yet (D13).</li>
+  </ol>
+</div>
+
+<section id="s1">
+<h2><span class="sheet">A-01</span>Repository assessment</h2>
+<p>I cloned <code>github.com/renzfeliciano/PCAScade</code> on 2026-11-20. It is <b>empty: no commits, no branches, no files.</b> All the items on the inspection checklist come back the same way:</p>
+<div class="tbl"><table>
+<thead><tr><th>Inspected</th><th>Finding</th><th>Implication</th></tr></thead>
+<tbody>
+<tr><td>package.json, dependencies</td><td>None</td><td>Pick versions at scaffold time. Use the current stable Next.js, pinned exactly.</td></tr>
+<tr><td>Next.js config, App Router</td><td>None</td><td>Start with route groups for public, admin and presentation (§4).</td></tr>
+<tr><td>Layouts, components</td><td>None</td><td>No reuse is possible. shadcn/ui gives copy-in primitives.</td></tr>
+<tr><td>TypeScript, Tailwind, shadcn</td><td>None</td><td>Strict TS (<code>strict</code>, <code>noUncheckedIndexedAccess</code>), Tailwind v4, shadcn CLI.</td></tr>
+<tr><td>Schema, migrations</td><td>None</td><td>Prisma schema plus hand-written SQL migrations for triggers and partial indexes (§5).</td></tr>
+<tr><td>Auth</td><td>None</td><td>Single-admin auth, built in-house (§8).</td></tr>
+<tr><td>API routes, actions</td><td>None</td><td>Server actions for admin mutations; route handlers for polling, uploads and exports.</td></tr>
+<tr><td>Env, deploy config</td><td>None</td><td>A Zod-validated <code>env.ts</code>; <code>vercel.json</code> only if needed.</td></tr>
+<tr><td>Tests</td><td>None</td><td>Vitest (unit and integration against real Postgres), Playwright (e2e).</td></tr>
+<tr><td>3D, animation, media</td><td>None</td><td>R3F, Drei and GSAP; Blender sources kept outside the deployed bundle.</td></tr>
+</tbody></table></div>
+<p>There is nothing to refactor. The main risk is the reverse: with no existing code, the first slices have to settle the conventions (module boundaries, error handling, test harness) properly.</p>
+</section>
+
+<section id="s2">
+<h2><span class="sheet">A-02</span>Current architecture</h2>
+<p>There is none yet. The only things that exist are an empty GitHub repository and two briefs (the master brief, which is truncated, and the single-admin amendment, which overrides it where they conflict).</p>
+<div class="diagram"><pre class="mermaid">
+flowchart LR
+  GH["GitHub: renzfeliciano/PCAScade (empty)"]
+  B1["Master brief (truncated at Tier 2)"]
+  B2["Single-admin amendment (overrides)"]
+  B1 --> GH
+  B2 --> GH
+</pre></div>
+</section>
+
+<section id="s3">
+<h2><span class="sheet">A-03</span>Proposed architecture</h2>
+<p>A <b>modular monolith</b>: one Next.js app on the Node.js runtime and one Postgres database. Modules talk to each other only through their <code>server/</code> service functions, and the raffle engine depends on nothing above it. The four surfaces (public, admin, presentation, verifier) are thin layers over these modules.</p>
+
+<div class="diagram"><pre class="mermaid">
+flowchart TB
+  subgraph Surfaces
+    PUB["Public site (/, /events, /prizes, /winners, /about)"]
+    ADM["Admin dashboard (/admin/*)"]
+    DIR["Director console (/admin/raffle-sessions/:id/control)"]
+    PRS["Presentation display (/presentation/*)"]
+    VER["Public verifier (/verify/:prepId)"]
+  end
+  subgraph Domain["Domain modules (src/modules)"]
+    AUTH["auth"]
+    EVT["events"]
+    PAR["participants"]
+    IMP["imports"]
+    MED["media"]
+    PRZ["prizes"]
+    RAF["raffle engine"]
+    BEA["beacon (drand)"]
+    AUD["audit chain"]
+    PST["presentation state"]
+  end
+  subgraph Scenes["Animation engine (src/scenes)"]
+    SC1["Brick by Brick"]
+    SC2["Build It Up"]
+    SC3["The Big Lift"]
+    SC4["The Grand Finale"]
+  end
+  DB[("Neon Postgres")]
+  OBJ[("Object storage")]
+  DR(["drand quicknet beacon"])
+
+  ADM --> AUTH
+  DIR --> AUTH
+  ADM --> EVT & PAR & IMP & PRZ & MED
+  DIR --> RAF & PST
+  IMP --> PAR & PRZ & MED
+  RAF --> BEA
+  RAF --> AUD
+  PAR --> AUD
+  PRZ --> AUD
+  EVT --> AUD
+  PUB --> EVT & PRZ & PST
+  PRS -->|"read-only poll"| PST
+  PRS --> Scenes
+  VER -->|"read-only"| RAF
+  BEA --> DR
+  Domain --> DB
+  MED --> OBJ
+</pre></div>
+<p class="cap">The presentation reads from <code>presentation state</code> and never calls the raffle engine. Only the director console, which needs an admin session, can start a draw or move the reveal forward.</p>
+
+<h3>Module responsibilities</h3>
+<div class="tbl"><table>
+<thead><tr><th>Module</th><th>Owns</th><th>Must never</th></tr></thead>
+<tbody>
+<tr><td><code>auth</code></td><td>Admin singleton, password hashing, sessions, login throttling, bootstrap CLI</td><td>Expose any account-creation route</td></tr>
+<tr><td><code>events</code></td><td>Event lifecycle (draft → published → live → closed → archived), settings, branding accents within PCASCADE limits</td><td>Allow unrestricted rebranding (logo, name and palette stay fixed)</td></tr>
+<tr><td><code>participants</code></td><td>Participant records, custom field definitions, eligibility</td><td>Change records of a frozen preparation (it checks the freeze guard)</td></tr>
+<tr><td><code>imports</code></td><td>Staged XLSX/CSV import, column mapping, validation, preview, atomic commit, revert, error reports, template download</td><td>Write to live tables before an explicit commit</td></tr>
+<tr><td><code>media</code></td><td>Upload tokens, metadata, content hashing, photo matching rules</td><td>Accept unverified MIME types or oversized files</td></tr>
+<tr><td><code>prizes</code></td><td>Categories (database records), prizes, quantities, draw order, eligibility rules</td><td>Hard-code tiers or category names</td></tr>
+<tr><td><code>raffle</code></td><td>Preparations, snapshots, freeze and cancel, draws, winners, corrections, deterministic selection, verifier</td><td>Import UI or scene code; use <code>Math.random</code></td></tr>
+<tr><td><code>beacon</code></td><td>Fetching drand rounds and verifying their BLS signatures</td><td>Fall back silently when the beacon is unavailable</td></tr>
+<tr><td><code>audit</code></td><td>Append-only hash chain, chain verification, exports</td><td>Update or delete rows (a database trigger enforces this)</td></tr>
+<tr><td><code>presentation state</code></td><td>Reveal cursor (which draw is shown, which phase), a public projection of committed results</td><td>Expose a winner before the reveal phase starts</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s4">
+<h2><span class="sheet">A-04</span>Folder structure</h2>
+<pre class="code">pcascade/
+├─ prisma/
+│  ├─ schema.prisma
+│  └─ migrations/                 # generated + hand SQL (triggers, partial unique indexes)
+├─ scripts/
+│  ├─ bootstrap-admin.ts          # one-time admin provisioning (local CLI, refuses if admin exists)
+│  └─ seed-dev.ts                 # development-only seed data
+├─ public/
+│  └─ scenes/&lt;scene&gt;/            # compressed GLB, KTX2 textures, HDRI (shipped static)
+├─ assets-src/                    # Blender .blend sources (Git LFS or kept outside the repo; not deployed)
+├─ src/
+│  ├─ app/
+│  │  ├─ (public)/                # landing, events, prizes, winners, about, verify
+│  │  ├─ (admin)/admin/           # login + every /admin route, guarded layout
+│  │  ├─ (presentation)/presentation/[eventId]/...
+│  │  └─ api/                     # route handlers: presentation state, uploads, exports, draws
+│  ├─ modules/
+│  │  ├─ auth/  events/  participants/  imports/  media/  prizes/
+│  │  ├─ raffle/
+│  │  │  ├─ domain/               # pure TS: canonical JSON, snapshot, derive, select, verify
+│  │  │  ├─ server/               # transactions, locks, persistence
+│  │  │  └─ schemas.ts            # Zod rule config + versioned algorithm ids
+│  │  ├─ beacon/  audit/  presentation/
+│  │  └─ &lt;module&gt;/{domain,server,ui,schemas.ts}
+│  ├─ scenes/
+│  │  ├─ engine/                  # SceneHost, preloader, quality tiers, timeline contract
+│  │  ├─ brick-by-brick/
+│  │  ├─ build-it-up/
+│  │  └─ registry.ts              # scene key → lazy component (category picks a key)
+│  ├─ components/ui/              # shadcn primitives
+│  ├─ components/brand/           # PCASCADE logo, construction UI kit
+│  └─ lib/                        # env.ts, db.ts, crypto.ts, errors.ts, http.ts
+├─ tools/verifier/                # standalone CLI that reuses src/modules/raffle/domain
+└─ tests/
+   ├─ unit/  integration/  e2e/   # integration runs against real Postgres
+   └─ fixtures/                   # spreadsheets, ZIPs, recorded drand rounds
+</pre>
+<p>The rule is that <code>raffle/domain</code> is pure and deterministic. The same code runs on the server, in the browser verifier page, and in the CLI verifier. That is what makes the result independently reproducible.</p>
+</section>
+
+<section id="s5">
+<h2><span class="sheet">A-05</span>Database design</h2>
+<div class="diagram"><pre class="mermaid">
+erDiagram
+  AdminUser ||--o{ AdminSession : has
+  Event ||--|| EventSettings : configures
+  Event ||--o{ ParticipantField : defines
+  Event ||--o{ Participant : owns
+  Event ||--o{ PrizeCategory : owns
+  Event ||--o{ Prize : owns
+  Event ||--o{ ImportBatch : receives
+  Event ||--o{ MediaAsset : stores
+  Event ||--o{ RafflePreparation : prepares
+  ImportBatch ||--o{ ImportRow : stages
+  PrizeCategory ||--o{ Prize : groups
+  Participant }o--o| MediaAsset : photo
+  Prize }o--o| MediaAsset : photo
+  RafflePreparation ||--o{ Draw : runs
+  RafflePreparation ||--o{ PreparationEvent : history
+  Prize ||--o{ Draw : "slot of"
+  Draw ||--o| Winner : commits
+  Participant ||--o{ Winner : wins
+  Winner ||--o{ WinnerCorrection : corrected_by
+  RafflePreparation ||--|| PresentationCursor : drives
+
+  Event {
+    uuid id PK
+    text slug UK
+    text name
+    text status
+    timestamptz starts_at
+    text accent_color
+  }
+  Participant {
+    uuid id PK
+    uuid event_id FK
+    text external_id
+    text full_name
+    text department
+    text job_title
+    text bio
+    jsonb custom_values
+    bool eligible
+    text status
+  }
+  Prize {
+    uuid id PK
+    uuid event_id FK
+    uuid category_id FK
+    text code
+    int quantity
+    int draw_order
+    jsonb eligibility_rule
+  }
+  RafflePreparation {
+    uuid id PK
+    uuid event_id FK
+    int version
+    text status
+    text participants_json
+    text prizes_json
+    text rules_json
+    bytea participants_sha256
+    bytea prizes_sha256
+    bytea rules_sha256
+    bytea seed_commitment
+    bytea seed_ciphertext
+    text algorithm_version
+  }
+  Draw {
+    uuid id PK
+    uuid preparation_id FK
+    uuid prize_id FK
+    int slot_number
+    int sequence
+    text idempotency_key UK
+    text status
+    bigint beacon_round
+    bytea beacon_signature
+    int candidate_count
+    bytea candidate_list_sha256
+    int selected_index
+  }
+  Winner {
+    uuid id PK
+    uuid draw_id FK
+    uuid participant_id FK
+    text exclusivity_key
+    timestamptz voided_at
+  }
+  AuditLog {
+    bigint seq PK
+    uuid event_id
+    text action
+    jsonb payload
+    bytea prev_hash
+    bytea hash UK
+  }
+</pre></div>
+<p class="cap">The ERD shows only the main columns. <code>AuditLog</code> isn't drawn with relations because it points at every entity through <code>(entity_type, entity_id)</code> in its payload.</p>
+
+<h3>Keys, constraints and indexes</h3>
+<div class="tbl"><table>
+<thead><tr><th>Table</th><th>Constraint / index</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>AdminUser</td><td><code>id smallint PK CHECK (id = 1)</code></td><td>The database itself enforces that only one admin can ever exist.</td></tr>
+<tr><td>AdminSession</td><td><code>token_sha256 UNIQUE</code>, index on <code>expires_at</code></td><td>Only a hash of the cookie token is stored, so leaking the database leaks no live sessions.</td></tr>
+<tr><td>Participant</td><td><code>UNIQUE (event_id, external_id)</code>, index <code>(event_id, eligible, status)</code></td><td>Detects duplicates per event; the same employee ID may appear in other events.</td></tr>
+<tr><td>ParticipantField</td><td><code>UNIQUE (event_id, key)</code></td><td>Custom field definitions are per event.</td></tr>
+<tr><td>PrizeCategory</td><td><code>UNIQUE (event_id, slug)</code>, <code>scene_key</code> text</td><td>Categories are data. Each one picks a scene from the code registry.</td></tr>
+<tr><td>Prize</td><td><code>UNIQUE (event_id, code)</code>, <code>CHECK (quantity &gt; 0)</code></td><td>Stable prize IDs for import updates.</td></tr>
+<tr><td>RafflePreparation</td><td>Partial unique <code>(event_id) WHERE status IN ('frozen','drawing')</code></td><td>Only one active official preparation per event.</td></tr>
+<tr><td>Draw</td><td>Partial unique <code>(preparation_id, prize_id, slot_number) WHERE status &lt;&gt; 'voided'</code>; <code>UNIQUE (idempotency_key)</code>; <code>UNIQUE (preparation_id, sequence)</code></td><td>Two requests can never fill the same slot, and a retry returns the same draw.</td></tr>
+<tr><td>Winner</td><td>Partial unique <code>(preparation_id, exclusivity_key) WHERE voided_at IS NULL AND exclusivity_key IS NOT NULL</code></td><td>Turns any repeat-winner rule into a database constraint (see below).</td></tr>
+<tr><td>AuditLog</td><td><code>UNIQUE (prev_hash)</code>, trigger rejects <code>UPDATE</code>/<code>DELETE</code></td><td>The chain can't fork, and existing rows can't be rewritten through the app.</td></tr>
+<tr><td>Snapshots, committed Draw/Winner</td><td>Triggers block changes to frozen snapshot columns and committed draw fields. <code>voided_at</code> can only go from NULL to a value, and only together with a correction row.</td><td>Makes the record immutable even if the application has a bug.</td></tr>
+</tbody></table></div>
+
+<h3>How a repeat-winner rule becomes a constraint</h3>
+<p>Every rule config compiles to an <code>exclusivity_key</code> that is computed when the winner is inserted:</p>
+<ul>
+<li>"Win at most once per raffle" → <code>participant_id</code></li>
+<li>"At most once per category" → <code>participant_id:category_id</code></li>
+<li>"Repeats allowed" → <code>NULL</code> (no constraint)</li>
+</ul>
+<p>The candidate filter in code already excludes ineligible people. The unique index is the backstop in case that code has a bug.</p>
+
+<h3>Event isolation</h3>
+<p>Every business table carries <code>event_id</code>, and every query in <code>modules/*/server</code> takes an <code>eventId</code> argument and filters on it. Composite foreign keys (<code>(event_id, id)</code>) make sure, for example, that a prize can only belong to a category in the same event.</p>
+
+<h3>Relational data vs validated JSON</h3>
+<div class="grid2">
+  <div class="card"><h4>Relational</h4><ul>
+    <li>Anything that is queried, counted, joined or constrained: participants, prizes, categories, draws, winners, media, imports</li>
+    <li>Built-in participant fields (name, department, job title)</li>
+    <li>Every state machine status</li>
+  </ul></div>
+  <div class="card"><h4>Zod-validated JSONB</h4><ul>
+    <li><code>Participant.custom_values</code>, checked against that event's <code>ParticipantField</code> definitions</li>
+    <li><code>Prize.eligibility_rule</code> (for example, department filters)</li>
+    <li><code>EventSettings.presentation</code> (countdown, audio, accent, quality tier)</li>
+    <li><code>ImportBatch.column_mapping</code>, <code>ImportRow.raw/errors/before_image</code></li>
+  </ul></div>
+  <div class="card"><h4>Canonical text, not JSONB</h4><ul>
+    <li>Snapshots are stored as <b>RFC 8785 canonical JSON text</b>. JSONB reorders keys and rewrites numbers, which would change the bytes and break the SHA-256 hashes.</li>
+  </ul></div>
+</div>
+<p class="small">Deviation from the brief: it suggested separate <code>ParticipantCustomField</code> and <code>ParticipantCustomFieldValue</code> tables (an entity-attribute-value design). I recommend JSONB values checked against field definitions instead. Imports and snapshots are much simpler, and with one admin and thousands of rows there is no query-performance cost. See D3.</p>
+
+<h3>Import history and media metadata</h3>
+<ul>
+<li><b>ImportBatch</b>: kind (participants or prizes), file name, file SHA-256, mapping, status (<code>staged → validated → committed | cancelled | reverted</code>), row and error counts, timestamps.</li>
+<li><b>ImportRow</b>: row number, raw values, normalized values, errors, planned action (create, update or skip), target ID, and a before-image so a commit can be reverted before freeze.</li>
+<li><b>MediaAsset</b>: event, kind (participant photo, prize photo, event cover, event logo), storage key, MIME type, bytes, width, height, SHA-256, original file name, and the import batch it came from.</li>
+</ul>
+</section>
+
+<section id="s6">
+<h2><span class="sheet">A-06</span>Route map</h2>
+<div class="tbl"><table>
+<thead><tr><th>Route</th><th>Surface</th><th>Access</th><th>Data</th></tr></thead>
+<tbody>
+<tr><td><code>/</code>, <code>/about</code></td><td>Public</td><td>Anyone</td><td>Published events, static copy</td></tr>
+<tr><td><code>/events</code>, <code>/events/[eventId]</code></td><td>Public</td><td>Anyone (published events only)</td><td>Event, categories, prize counts</td></tr>
+<tr><td><code>/prizes</code></td><td>Public</td><td>Anyone</td><td>Prizes of published events</td></tr>
+<tr><td><code>/winners</code></td><td>Public</td><td>Anyone</td><td>Revealed, non-voided winners only</td></tr>
+<tr><td><code>/verify/[preparationId]</code></td><td>Public</td><td>Anyone once the event is published</td><td>Pre-draw manifest, draw records, revealed seed (after completion); runs the verifier in the browser</td></tr>
+<tr><td><code>/admin/login</code></td><td>Admin</td><td>Anyone, rate-limited</td><td>None</td></tr>
+<tr><td><code>/admin</code> and all routes listed in the brief</td><td>Admin</td><td>Admin session (checked in layout, in every action and in every handler)</td><td>Everything</td></tr>
+<tr><td><code>/admin/raffle-sessions/[id]</code></td><td>Admin</td><td>Admin</td><td>Prepare, review hashes, export manifest, freeze, cancel</td></tr>
+<tr><td><code>/admin/raffle-sessions/[id]/control</code></td><td>Director console</td><td>Admin</td><td>Start draw, start reveal, next prize, pause</td></tr>
+<tr><td><code>/admin/settings/security</code></td><td>Admin</td><td>Admin plus current password</td><td>Change password, revoke sessions</td></tr>
+<tr><td><code>/presentation/[eventId]</code> and its 4 sub-routes</td><td>Presentation</td><td>Published event (D6: public or unlisted token)</td><td>Read-only projection from the presentation-state API</td></tr>
+<tr><td><code>GET /api/presentation/[eventId]/state</code></td><td>API</td><td>Same as presentation</td><td>Cursor plus committed results; the winner is included only when phase ≥ <code>revealing</code></td></tr>
+<tr><td><code>POST /api/admin/draws</code></td><td>API</td><td>Admin, same-origin, idempotency key</td><td>Creates or returns a draw</td></tr>
+<tr><td><code>POST /api/admin/media/upload</code></td><td>API</td><td>Admin</td><td>One resized image per request (under 4.5 MB)</td></tr>
+<tr><td><code>GET /api/admin/exports/*</code></td><td>API</td><td>Admin</td><td>Manifests, snapshots, reports, import error CSVs</td></tr>
+<tr><td><code>GET /api/media/[assetId]</code></td><td>API</td><td>Same visibility as the record that owns the asset</td><td>Image bytes with immutable cache headers (only used if D2 picks Postgres storage)</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s7">
+<h2><span class="sheet">A-07</span>Data flows</h2>
+
+<h3>7.1 Participant import with photos</h3>
+<p>Vercel Functions accept request bodies up to about 4.5 MB, so the browser does the heavy work: it reads the files, unzips them and resizes the photos. The server re-validates every row and every image, and nothing reaches the live tables until the admin commits.</p>
+<div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor A as Admin (browser)
+  participant UI as Import wizard
+  participant S as imports server
+  participant DB as Postgres
+  participant M as media
+  A->>UI: Drop XLSX/CSV + photos ZIP
+  UI->>UI: Parse sheet, unzip, list headers
+  A->>UI: Map columns to fields, pick photo match rule
+  UI->>S: Create batch (file hash, mapping)
+  loop chunks of 500 rows
+    UI->>S: Stage rows
+    S->>S: Zod validate, normalize, detect duplicates
+    S->>DB: Insert ImportRow (raw, normalized, errors, action)
+  end
+  S-->>UI: Preview: creates / updates / skips / errors
+  UI->>UI: Match photos, resize to WebP 640px
+  loop each matched photo
+    UI->>M: Upload one image
+    M->>M: Check magic bytes, size, SHA-256
+    M->>DB: MediaAsset (staged, batch id)
+  end
+  A->>UI: Commit (only if zero blocking errors)
+  UI->>S: Commit batch
+  S->>DB: One transaction: freeze guard, upsert, link photos, audit
+  S-->>A: Summary + downloadable error report
+</pre></div>
+
+<h3>7.2 Prepare and freeze</h3>
+<div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor A as Admin
+  participant R as raffle server
+  participant DB as Postgres
+  A->>R: Prepare raffle (event)
+  R->>DB: Read eligible participants, prizes, rules
+  R->>R: Canonical JSON (RFC 8785), SHA-256 each snapshot
+  R->>R: seed = 32 random bytes, commitment = SHA-256(seed)
+  R->>R: Encrypt seed (AES-256-GCM, key from env)
+  R->>DB: RafflePreparation (draft) + audit
+  R-->>A: Manifest preview (hashes, counts, commitment)
+  A->>R: Freeze
+  R->>DB: Tx: re-hash live data, must equal draft, status frozen, audit
+  R-->>A: Pre-draw manifest (JSON + printable)
+  Note over A: Shares manifest hash with witnesses before the first draw
+</pre></div>
+<p>After the freeze, the participant, prize and rule services refuse to write anything that affects that event, and they say why. To change anything, the admin has to <b>cancel</b> the preparation with a written reason, which is recorded in the audit chain, and then create a new one (<code>version + 1</code>). The cancelled preparation and its snapshots are kept.</p>
+
+<h3>7.3 Draw execution</h3>
+<div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor D as Director console
+  participant R as raffle server
+  participant DB as Postgres
+  participant B as drand quicknet
+  D->>R: POST draw (prizeId, idempotencyKey)
+  R->>DB: Existing draw for key? return it
+  R->>B: Latest round number
+  R->>DB: Tx + advisory lock(preparation): verify hashes, next open slot, insert Draw pending with target_round = latest + 2
+  Note over R,DB: Target round is committed before it exists
+  R->>B: Wait for target round (about 6 s)
+  R->>R: Verify BLS signature
+  R->>R: Decrypt seed, derive stream, rejection-sample index
+  R->>DB: Tx + lock: re-check slot, insert Winner, Draw committed, audit
+  R-->>D: Committed draw id (winner withheld from display)
+  D->>R: Start reveal
+  R->>DB: PresentationCursor phase = revealing
+</pre></div>
+<div class="callout">
+<p><strong>Why the admin can't reroll.</strong> The draw row and its target beacon round are committed <i>before</i> that round exists. Retries reuse the same target round, and drand rounds never change once published, so a retry always gives the same winner. A pending draw can't be deleted, only voided through a correction that is recorded in the audit chain and shown on the public verify page.</p>
+<p><strong>If drand is unreachable</strong>, the draw stays <code>pending_beacon</code> and the console shows "Beacon unavailable – retry". Nothing falls back silently. A CSPRNG-only mode exists, but it has to be chosen in the rule snapshot <i>before</i> freeze, and the manifest then says so.</p>
+</div>
+
+<h3>Selection algorithm <code>pcascade-select-v1</code></h3>
+<pre class="code">candidates = frozen participants
+             filtered by prize.eligibility_rule
+             minus exclusivity conflicts with prior committed winners in this preparation
+             sorted by participant id (bytewise)
+candidate_list_sha256 = SHA-256(canonical(candidates ids))
+
+key   = SHA-256( "PCASCADE/select/v1" ‖ preparation_id ‖ participants_sha256 ‖ rules_sha256
+                 ‖ draw_sequence ‖ prize_id ‖ slot_number ‖ server_seed ‖ beacon_round ‖ beacon_randomness )
+block_i = HMAC-SHA256(key, uint32be(i))   for i = 0,1,2…
+read 8 bytes at a time as uint64 r;  limit = floor(2^64 / n) * n
+accept the first r &lt; limit;  index = r mod n        # rejection sampling, no modulo bias
+winner = candidates[index]</pre>
+<p>Every input is stored on the draw or the preparation, or can be derived from them. Once the seed is revealed, anyone with the export bundle can re-run this code, either with <code>tools/verifier</code> or on the <code>/verify</code> page, and check four things separately: <b>snapshot integrity</b>, <b>beacon validity</b> (BLS signature against the published quicknet public key), <b>draw result</b>, and <b>audit-chain integrity</b>.</p>
+
+<h3>7.4 Presentation and refresh recovery</h3>
+<div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant P as Presentation display
+  participant API as /api/presentation/state
+  participant DB as Postgres
+  loop every 1 s (ETag, 304 when unchanged)
+    P->>API: GET state
+    API->>DB: Cursor + committed public projection
+    API-->>P: phase, drawId, sceneKey, winner (only if revealing or revealed)
+  end
+  Note over P: Refresh mid-reveal: reload state, phase is revealing, so replay scene from its start (or skip to final frame per settings)
+  Note over P: Winner shown always comes from the server; scene only animates it
+</pre></div>
+<p>Cost check: polling once a second for a 3-hour event is about 10,800 function invocations, well under the 1,000,000 per month in the Hobby plan. Unchanged responses come back as 304.</p>
+
+<h3>7.5 Reset operations</h3>
+<p>Resets change the <i>operational</i> state. They never change the historical record. Both run under the same advisory lock as draws, and both are refused while any draw in the preparation is <code>pending_beacon</code>.</p>
+<div class="tbl"><table>
+<thead><tr><th></th><th>Reset Current Raffle Item</th><th>Fresh Start</th></tr></thead>
+<tbody>
+<tr><td>Precondition</td><td>The item's current draw is <code>committed</code>; no draw in flight</td><td>Preparation is <code>frozen</code> or <code>drawing</code>; no draw in flight</td></tr>
+<tr><td>Writes (one transaction)</td><td><code>WinnerCorrection(kind=reset_item, reason, previous_draw_id)</code>; <code>Winner.voided_at</code> and <code>Draw.status=voided</code> (one-way changes allowed by trigger); slot cursor back to <code>pending</code>; audit entry</td><td>Old preparation <code>superseded</code>, with reason; its seed is revealed so its draws stay verifiable; new <code>RafflePreparation</code> (new ID, <code>version+1</code>) in <code>draft</code>; audit entry</td></tr>
+<tr><td>Next step</td><td>A new <code>Draw</code> row for the same slot: new sequence, new idempotency key, new future beacon round</td><td>The admin re-runs prepare and freeze: fresh snapshots, new seed commitment, new manifest</td></tr>
+<tr><td>Idempotency key</td><td><code>previous_draw_id</code>, so resetting the same draw twice returns the first correction</td><td><code>old_preparation_id</code></td></tr>
+<tr><td>Kept</td><td>Original draw, winner, beacon evidence and audit entries, all still verifiable</td><td>Every earlier draw, winner, snapshot and audit entry</td></tr>
+<tr><td>Public visibility</td><td>The verify page and post-draw report list every reset with its reason and both draws</td><td>The verify page lists superseded sessions; <code>/winners</code> shows only the active session (D12)</td></tr>
+</tbody></table></div>
+<div class="callout">
+<p><strong>Decision (2026-11-20): resets are unlimited.</strong> This deliberately overrides the amendment's rule against rerolling until a preferred winner appears. What still applies:</p>
+<ul>
+<li>A <b>reason is required</b> for every reset: a category from a configured list (winner absent, ineligible, data error, technical issue) plus free text.</li>
+<li><b>Every reset is public.</b> The reset count and each voided draw appear on the director console, the verify page and the post-draw report.</li>
+<li>Whether the voided winner can win the redraw is a setting in the rule snapshot. The default is <b>excluded</b>.</li>
+</ul>
+<p><b>Consequence:</b> the system can't claim that the admin is unable to reroll. The verify page will say plainly that resets are unlimited and that fairness depends on the reset history, which it lists in full.</p>
+</div>
+
+<h3>Animation engine contract</h3>
+<p>Each scene is a lazy component with the same contract: <code>{ winner, prize, accent, quality, onPhase }</code>. It preloads its assets during the countdown, plays a GSAP master timeline, and calls <code>onPhase('revealed')</code> at the end. A scene receives a winner that is already committed and can't change anything. Quality tiers (texture resolution, shadows, particle counts) are chosen by a GPU probe on the presentation machine. Scenes use only original Blender models and CC0 PBR textures and HDRIs.</p>
+</section>
+
+<section id="s8">
+<h2><span class="sheet">A-08</span>Security</h2>
+<h3>Authentication and bootstrap</h3>
+<div class="grid2">
+  <div class="card"><h4>Bootstrap</h4><ul>
+    <li><code>npm run admin:bootstrap</code> runs locally against <code>DATABASE_URL</code>, asks for the password with no echo, and refuses if the admin row exists.</li>
+    <li>There is no HTTP route that creates an admin, ever.</li>
+    <li>Recovery means re-running the CLI with <code>--reset</code>, which needs direct database credentials and is written to the audit chain.</li>
+  </ul></div>
+  <div class="card"><h4>Passwords</h4><ul>
+    <li><code>node:crypto</code> scrypt (N=2^17, r=8, p=1, 16-byte salt), compared with <code>timingSafeEqual</code>. It needs no native dependency and works on every Node runtime.</li>
+    <li>Minimum 12 characters; checked against a bundled common-password list.</li>
+    <li>Changing the password requires the current one and revokes every other session.</li>
+  </ul></div>
+  <div class="card"><h4>Sessions</h4><ul>
+    <li>32-byte random token in a <code>__Host-</code> cookie: <code>HttpOnly</code>, <code>Secure</code>, <code>SameSite=Lax</code>.</li>
+    <li>The database stores only its SHA-256. Sessions expire after 8 hours idle and 7 days at most, and the token rotates on login.</li>
+    <li><code>requireAdmin()</code> is called in the admin layout <i>and</i> in every server action and route handler. Middleware alone isn't trusted.</li>
+  </ul></div>
+  <div class="card"><h4>Login throttling</h4><ul>
+    <li>A <code>LoginAttempt</code> table in Postgres, keyed by hashed IP plus a global counter.</li>
+    <li>Backoff: 5 failures → 1 minute, doubling up to 1 hour. No paid rate-limit service.</li>
+    <li>Every attempt is recorded in the audit chain.</li>
+  </ul></div>
+</div>
+
+<h3>Threat model</h3>
+<div class="tbl"><table>
+<thead><tr><th>Threat</th><th>Control</th><th>Remaining exposure</th></tr></thead>
+<tbody>
+<tr><td>Public visitor reaches admin functions</td><td>Server-side session check on every entry point, same-origin check on mutations, admin code never imported by public routes</td><td>Low</td></tr>
+<tr><td>Password guessing</td><td>scrypt, backoff, audited attempts</td><td>Low</td></tr>
+<tr><td>Admin rerolls for a preferred winner</td><td>Target beacon round committed before it exists; retries are deterministic; a void needs a recorded correction that is published</td><td>Visible, not prevented: the admin can still void a winner, but it appears on the public verify page</td></tr>
+<tr><td>Admin changes the roster after seeing who is likely to win</td><td>Freeze plus snapshot hashes; pre-draw manifest shared with witnesses</td><td>Only effective if the manifest hash is actually shared before draws</td></tr>
+<tr><td>Someone with database owner access rewrites history</td><td>Hash chain plus triggers stop app bugs; the externally shared manifest and post-draw report expose rewrites</td><td><b>Trust assumption:</b> the database owner can drop triggers. External anchoring (sharing the manifest) is the real defense</td></tr>
+<tr><td>Server predicts randomness</td><td>Seed committed at freeze, combined with a future public drand round</td><td>Trust assumption: the drand threshold network (League of Entropy) isn't colluding</td></tr>
+<tr><td>Leaked encryption key or environment</td><td>Seed encrypted at rest; key only in Vercel env; the seed alone can't predict a future round</td><td>Hosting provider staff and account takeover (protect the Vercel and Neon accounts with 2FA)</td></tr>
+<tr><td>Concurrent or double-click draws</td><td>Idempotency key, advisory lock per preparation, partial unique slot index</td><td>Low (covered by tests)</td></tr>
+<tr><td>Spoilers in the presentation's network traffic</td><td>Winner payload sent only once the phase is <code>revealing</code></td><td>Low</td></tr>
+<tr><td>Malicious spreadsheet, ZIP or image</td><td>Parsed in the browser; server re-validates with Zod; limits on ZIP entry count and size (zip-bomb guard); images checked by magic bytes; formula cells stored as values; CSV export guarded against formula injection</td><td>Low</td></tr>
+<tr><td>Personal data exposure</td><td>Public projection exposes only approved fields (name, department, photo, short bio); email and custom fields stay private by default</td><td>Covered by D7 (consent and data privacy)</td></tr>
+</tbody></table></div>
+<p>As the brief requires, the docs and the UI will <b>not</b> claim the raffle is impossible to rig. The verify page lists what the controls prevent and the three trust assumptions above.</p>
+</section>
+
+<section id="s9">
+<h2><span class="sheet">A-09</span>Deployment feasibility</h2>
+<h3>Runtime compatibility</h3>
+<div class="tbl"><table>
+<thead><tr><th>Capability</th><th>Vercel (Node.js runtime)</th><th>Cloudflare Workers (assessed, not recommended)</th></tr></thead>
+<tbody>
+<tr><td>Next.js App Router</td><td><span class="pill ok">native</span></td><td><span class="pill warn">via OpenNext adapter</span> or <span class="pill warn">vinext</span> (1.0 announced, README still says experimental, App Router gaps expected)</td></tr>
+<tr><td>Prisma with Neon</td><td><span class="pill ok">supported</span> with a driver adapter (<code>@prisma/adapter-pg</code> or <code>-neon</code>). Spike will confirm</td><td><span class="pill warn">supported via adapter-neon</span>, edge build</td></tr>
+<tr><td>Interactive transactions, <code>pg_advisory_xact_lock</code></td><td><span class="pill ok">yes</span> (transaction-scoped locks work through Neon's pooler; session locks don't)</td><td><span class="pill warn">WebSocket driver only</span>; the HTTP driver has no interactive transactions</td></tr>
+<tr><td><code>node:crypto</code> (scrypt, randomBytes, HMAC)</td><td><span class="pill ok">yes</span></td><td><span class="pill warn">nodejs_compat</span>; scrypt CPU cost clashes with the free plan's per-request CPU limit</td></tr>
+<tr><td>drand BLS verification (<code>@noble/curves</code>)</td><td><span class="pill ok">yes</span> (pure JS)</td><td><span class="pill bad">likely over free CPU budget</span>, needs testing</td></tr>
+<tr><td>Uploads</td><td><span class="pill warn">4.5 MB body limit</span>, so resize in the browser and send one image per request</td><td>Direct-to-R2 presigned PUT</td></tr>
+<tr><td>Function duration</td><td><span class="pill ok">300 s max</span> (Fluid compute, Hobby)</td><td>CPU-time limited, not wall-clock</td></tr>
+</tbody></table></div>
+<p><b>Verdict:</b> Vercel's Node runtime runs every security-critical piece (scrypt, transactions, locks, BLS verification) without adapters or experimental frameworks. Cloudflare's free plan is a poor fit on CPU time, separately from any terms question. I suggest keeping Cloudflare only as the fallback in D1.</p>
+
+<h3>Zero-cost dependency review</h3>
+<div class="tbl"><table>
+<thead><tr><th>Provider</th><th>Purpose</th><th>Free allowance (as published)</th><th>Terms / commercial use</th><th>What fails when exceeded</th><th>Alternative</th></tr></thead>
+<tbody>
+<tr><td><b>Vercel Hobby</b></td><td>Hosting, functions, CDN</td><td>100 GB fast data transfer, 1M invocations, 360 GB-hrs memory per month; 300 s functions; 2 GB / 1 vCPU</td><td><span class="pill bad">Personal or non-commercial only</span>; Fair Use reportedly counts paid staff or contractors as commercial</td><td>The feature is blocked until 30 days have passed, so an overrun on event night is fatal</td><td>Cloudflare Workers free (commercial use to be re-verified); Vercel Pro (paid, breaks the budget)</td></tr>
+<tr><td><b>Neon Free</b></td><td>Postgres</td><td>100 CU-hours per project per month; 0.5–1 GB storage per project (Neon's pages disagree); 5 GB egress; scale-to-zero</td><td><span class="pill warn">Not found yet</span>; the Terms of Service need reading</td><td>Compute suspends; writes fail at the storage cap; no automatic billing</td><td>Supabase Free (pauses after inactivity), self-hosted (not free)</td></tr>
+<tr><td><b>Cloudflare R2</b></td><td>Photos (option A)</td><td>10 GB-month, 1M Class A, 10M Class B, zero egress</td><td><span class="pill warn">Card possibly required</span>: product page says no card, a 2026 setup guide says a payment method is needed before the first bucket</td><td>Overage is <i>billed</i>, which needs a card, so usage must be capped</td><td>Option C</td></tr>
+<tr><td><b>Vercel Blob</b></td><td>Photos (option B)</td><td>1 GB, 10k simple ops, 2k advanced ops, 10 GB transfer</td><td>Same Hobby terms</td><td>Blocked for 30 days; 2k uploads a month is tight for re-imports of about 1,000 photos</td><td>Option C</td></tr>
+<tr><td><b>Postgres bytea + CDN cache</b></td><td>Photos (option C)</td><td>Counts against Neon storage (about 40 KB per WebP photo, so 1,000 photos ≈ 40 MB)</td><td>Same as Neon</td><td>Neon storage cap</td><td>A or B</td></tr>
+<tr><td><b>drand quicknet</b></td><td>Public randomness</td><td>Free public HTTP relays, a round every 3 s</td><td><span class="pill warn">Public good; confirm relay usage terms</span></td><td>Relays down → draws stay pending (controlled failure)</td><td>CSPRNG-only mode chosen before freeze</td></tr>
+<tr><td><b>GitHub</b> + Actions</td><td>Code, CI</td><td>Unlimited public repo minutes; 2,000 min/month for private (to re-verify)</td><td>Commercial use allowed on Free (to re-verify)</td><td>CI pauses</td><td>Run tests locally</td></tr>
+<tr><td><b>Blender</b></td><td>3D authoring</td><td>Free (GPL)</td><td>Your output is yours; GPL doesn't apply to renders or assets</td><td>None</td><td>None</td></tr>
+<tr><td><b>Poly Haven / ambientCG</b></td><td>Textures, HDRIs</td><td>Free</td><td>CC0, so commercial use is OK</td><td>None</td><td>Self-made textures</td></tr>
+<tr><td><b>Google Fonts</b> (self-hosted via next/font)</td><td>Type</td><td>Free</td><td>OFL</td><td>None</td><td>None</td></tr>
+<tr><td>npm libraries</td><td>R3F, Drei, Three, GSAP, Zod, fflate, SheetJS, @noble/curves, canonicalize</td><td>Free</td><td>MIT, Apache or similar. <b>GSAP is now free, including commercial use, under its own license (re-verify).</b> SheetJS CE must come from its own CDN tarball, because the npm copy is outdated</td><td>None</td><td>exceljs and papaparse instead of SheetJS</td></tr>
+</tbody></table></div>
+<p class="small">The figures come from vendor documentation found on 2026-11-20 (see Sources). Items marked "re-verify" are from memory or from conflicting pages. Phase 6 re-checks every row against the live terms before the first event.</p>
+</section>
+
+<section id="s10">
+<h2><span class="sheet">A-10</span>Implementation roadmap</h2>
+<div class="tbl"><table>
+<thead><tr><th>Phase</th><th>Scope</th><th>Exit criteria</th></tr></thead>
+<tbody>
+<tr><td><b>0 · Spike</b></td><td>Hello-world deployed to Vercel with Neon and Prisma; 50 concurrent draw requests against one slot; drand fetch plus BLS verify; one image upload; an R3F scene with a textured wall on the actual presentation PC</td><td>Locks hold, every function works on Hobby, 60 fps or a measured fallback tier</td></tr>
+<tr><td><b>1 · Foundation</b> (A)</td><td>Scaffold, env validation, layouts for 3 surfaces, brand kit, auth and bootstrap, Event CRUD, audit chain</td><td>Unauthorized-access tests pass; audit chain verifies</td></tr>
+<tr><td><b>2 · Participants &amp; imports</b> (B)</td><td>Fields, participants, XLSX/CSV wizard, ZIP photo matching, media, prize and category CRUD, prize import</td><td>Import validation and photo-matching tests; atomic commit and revert</td></tr>
+<tr><td><b>3 · Raffle engine</b> (C)</td><td>Snapshots, freeze and cancel, beacon, select-v1, draws, winners, corrections, verifier CLI and /verify page, reports</td><td>The full test list in amendment §6 passes, <i>before</i> any animation exists</td></tr>
+<tr><td><b>4 · Public &amp; presentation</b></td><td>Public pages, presentation shell, director console, state polling, refresh recovery, a placeholder reveal</td><td>Refresh-during-reveal e2e test passes</td></tr>
+<tr><td><b>5 · Animation engine</b> (D)</td><td>Creative-direction deliverables first (storyboards, camera plans, budgets, licensing). Then the scene host; Brick by Brick, Build It Up, The Big Lift, The Grand Finale, built and tested one at a time</td><td>Each scene at the target fps on presentation hardware; approved by you</td></tr>
+<tr><td><b>6 · Deployment verification</b> (E)</td><td>Re-check every provider's terms and limits, usage dashboards, a quota budget for event night</td><td>Signed-off cost and terms sheet</td></tr>
+<tr><td><b>7 · Final audit</b> (F)</td><td>Security review, full e2e, dress rehearsal with a copy of the real roster, backup and export drill</td><td>Rehearsal runs end to end and the verifier reproduces every draw</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s11">
+<h2><span class="sheet">A-11</span>Risk register</h2>
+<div class="tbl"><table>
+<thead><tr><th>#</th><th>Risk</th><th>Likelihood</th><th>Impact</th><th>Mitigation</th></tr></thead>
+<tbody>
+<tr><td>R1</td><td>Vercel treats the use as commercial and Hobby isn't allowed</td><td><span class="pill bad">High</span></td><td>Must re-host</td><td>Get written confirmation first (D1); keep the code portable (no Vercel-only APIs)</td></tr>
+<tr><td>R2</td><td>A quota overrun blocks a feature for 30 days during the event</td><td><span class="pill warn">Med</span></td><td>Event fails</td><td>Budget per event, preload assets, ETag polling, watch usage in rehearsal</td></tr>
+<tr><td>R3</td><td>Realistic 3D quality isn't reached with original assets</td><td><span class="pill warn">Med</span></td><td>Core identity</td><td>Phase 0 hardware test, Brick by Brick as the quality bar, CC0 PBR materials, decide who authors the Blender assets (D11)</td></tr>
+<tr><td>R4</td><td>Presentation PC GPU is too weak</td><td><span class="pill warn">Med</span></td><td>Stutter on stage</td><td>Quality tiers, profile on the actual machine early</td></tr>
+<tr><td>R5</td><td>drand relays unavailable on event night</td><td><span class="pill ok">Low</span></td><td>Draws pause</td><td>Multiple relays, recorded health check before the event, CSPRNG mode decided before freeze</td></tr>
+<tr><td>R6</td><td>Neon cold start or compute suspension</td><td><span class="pill ok">Low</span></td><td>Slow first request</td><td>Warm-up step in the director console; CU-hour budget</td></tr>
+<tr><td>R7</td><td>Prisma adapter limitation (transactions, locks, partial indexes)</td><td><span class="pill ok">Low</span></td><td>Rework</td><td>Spike first; raw SQL for locks and indexes; Drizzle as a fallback</td></tr>
+<tr><td>R8</td><td>Personal data and photos published without consent</td><td><span class="pill warn">Med</span></td><td>Legal (PH Data Privacy Act)</td><td>Private by default, per-field public toggle, consent column, delete after the event (D7)</td></tr>
+<tr><td>R9</td><td>The Grand Finale (a full skyscraper build) is too heavy for office GPUs in real time</td><td><span class="pill warn">Med</span></td><td>Climax stutters</td><td>A hybrid approach: a pre-rendered WebM/MP4 of the build plus a real-time billboard reveal with the dynamic winner; decided in prototype</td></tr>
+<tr><td>R10</td><td>Free terms change without notice</td><td><span class="pill warn">Med</span></td><td>Re-hosting</td><td>Phase 6 re-check, portable architecture, exports</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s12">
+<h2><span class="sheet">A-12</span>Decisions requiring your approval</h2>
+<ol class="decisions">
+<li><b>Hosting.</b> <span class="pill ok">Decided</span> Vercel Hobby; the commercial-use question goes to Vercel in parallel. Original recommendation: Vercel Hobby, only after written confirmation from Vercel that a free, internal, no-revenue company raffle counts as non-commercial. Fallback: production on Cloudflare (needs the CPU-time questions answered). Vercel Pro would break the zero-cost rule.</li>
+<li><b>Photo storage.</b> <span class="pill ok">Decided</span> option C, photos stored in Neon Postgres. Original recommendation: <b>C, Postgres bytea with CDN caching</b>. It needs no extra provider or card, has no upload-operation limits, and imports stay atomic. Use A (R2) if it turns out to need no card and photo volume grows.</li>
+<li><b>Custom fields:</b> JSONB checked against field definitions, instead of separate EAV tables.</li>
+<li><b>Randomness:</b> drand quicknet combined with a committed server seed (<code>pcascade-select-v1</code>). CSPRNG-only mode is allowed only if declared before freeze.</li>
+<li><b>Draw control:</b> a separate director console that needs an admin session, plus a read-only presentation display. They can run on the same laptop in two windows.</li>
+<li><b>Presentation visibility:</b> public once the event is published, or unlisted behind a per-event token.</li>
+<li><b>Data privacy:</b> what may appear publicly (name, department, photo, bio?), whether consent is recorded, and how long data is kept after the event.</li>
+<li><b>Auth:</b> built in-house (scrypt plus database sessions) with no auth library or provider.</li>
+<li><b>ORM:</b> Prisma, with Drizzle as the fallback if the spike shows a blocker.</li>
+<li><b>Correction policy:</b> what happens when a winner is absent or ineligible. Proposal: handle it through Reset Current Raffle Item (§7.5).</li>
+<li><b>3D asset authoring:</b> who builds the Blender scenes, and what "done" looks like for realism (a reference image per scene).</li>
+<li><b>Reset bounds:</b> <span class="pill ok">Decided</span> unlimited resets, each with a reason and shown publicly (§7.5). Still open: whether <code>/winners</code> shows only the active session after a Fresh Start (default: yes).</li>
+<li><b>Project folder:</b> <code>C:\Users\Renzo Payod\Personal Files\PCAScade</code> (writable now), or grant write access to <code>C:\Users\Renzo Payod</code>.</li>
+</ol>
+</section>
+
+<section id="src">
+<h2><span class="sheet">REF</span>Sources (retrieved 2026-11-20)</h2>
+<ul class="small">
+<li><a href="https://vercel.com/legal/terms">Vercel Terms of Service</a> · <a href="https://vercel.com/docs/plans/hobby">Vercel Hobby plan</a> · <a href="https://vercel.com/docs/limits">Vercel limits</a> · <a href="https://vercel.com/docs/functions/limitations">Vercel Functions limits</a> · <a href="https://community.vercel.com/t/question-about-commercial-usage/23321">Community thread on commercial use</a></li>
+<li><a href="https://vercel.com/docs/vercel-blob/usage-and-pricing">Vercel Blob pricing</a></li>
+<li><a href="https://neon.com/faqs/free-plan-limits-and-quotas">Neon Free plan limits</a> · <a href="https://neon.com/pricing">Neon pricing</a></li>
+<li><a href="https://developers.cloudflare.com/r2/platform/pricing/">Cloudflare R2 pricing</a> · <a href="https://www.cloudflare.com/r2/">R2 product page</a> · <a href="https://tech-insider.org/how-to-set-up-cloudflare-r2-2026/">R2 setup guide (third party, says a payment method is needed)</a></li>
+<li><a href="https://blog.cloudflare.com/vinext-nextjs-on-vite/">Vinext 1.0 announcement</a> · <a href="https://github.com/cloudflare/vinext">vinext repository</a></li>
+<li><a href="https://docs.drand.love/developer/http-api">drand HTTP API</a> · <a href="https://docs.drand.love/blog/2025/08/26/verifying-bls12-on-ethereum">Verifying quicknet beacons</a></li>
+</ul>
+</section>
+</main>
+</div>
