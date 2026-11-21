@@ -6,7 +6,9 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/modules/auth/server/request-context";
 import { isPublicStatus, toManilaInputValue } from "@/modules/events/domain/event-rules";
 import { getEventForAdmin } from "@/modules/events/server/events";
+import { parseParticipantDisplay, parsePresentationSettings } from "@/modules/presentation/domain/display";
 import { updateEventAction } from "../actions";
+import { DisplayForm } from "../display-form";
 import { EventForm } from "../event-form";
 import { StatusControls } from "../status-controls";
 
@@ -67,6 +69,16 @@ export default async function AdminEventPage({ params }: PageProps<"/admin/event
           }}
         />
       </section>
+
+      <Card className="max-w-3xl">
+        <CardHeader>
+          <CardTitle>Winner display and presentation</CardTitle>
+          <CardDescription>Applies to the presentation screen, the winner wall and the public winners page.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DisplayForm eventId={event.id} display={parseParticipantDisplay(event.participantDisplay)} countdownSeconds={parsePresentationSettings(event.presentation).countdownSeconds} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

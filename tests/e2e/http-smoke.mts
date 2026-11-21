@@ -49,11 +49,30 @@ async function main() {
   const publishedRaffle = await sealRaffle(published.id);
   const draftRaffle = await sealRaffle(draft.id);
 
-  for (const path of ["/", "/events", "/about", `/events/${published.slug}`, `/presentation/${published.slug}`]) {
+  for (const path of [
+    "/",
+    "/events",
+    "/about",
+    "/prizes",
+    "/winners",
+    `/events/${published.slug}`,
+    `/presentation/${published.slug}`,
+    `/presentation/${published.slug}/prizes`,
+    `/presentation/${published.slug}/winner-wall`,
+    `/presentation/${published.slug}/recap`,
+    `/presentation/${published.slug}/draw/${published.id}`,
+  ]) {
     const response = await get(path);
     check(`public ${path}`, response.status === 200, `HTTP ${response.status}`);
   }
-  for (const path of [`/events/${draft.slug}`, `/presentation/${draft.slug}`, `/presentation/${draft.id}`]) {
+  for (const path of [
+    `/events/${draft.slug}`,
+    `/presentation/${draft.slug}`,
+    `/presentation/${draft.id}`,
+    `/presentation/${draft.slug}/winner-wall`,
+    `/api/presentation/${draft.slug}/state`,
+    "/api/presentation/NOT_A_SLUG/state",
+  ]) {
     const response = await get(path);
     check(`draft hidden ${path}`, response.status === 404, `HTTP ${response.status}`);
   }
@@ -69,10 +88,24 @@ async function main() {
     check(`hidden ${path.replace(/[0-9a-f-]{36}/, "<id>")}`, response.status === 404, `HTTP ${response.status}`);
   }
 
+  const state = await get(`/api/presentation/${published.slug}/state`);
+  const etag = state.headers.get("etag") ?? "";
+  const stateBody = (await state.json().catch(() => ({}))) as { screen?: string; event?: { slug?: string }; prizes?: { name?: string }[] };
+  check(
+    "presentation state API",
+    state.status === 200 && stateBody.screen === "LOBBY" && stateBody.event?.slug === published.slug && stateBody.prizes?.[0]?.name === "Smoke prize" && /^"[0-9a-f]{32}"$/.test(etag),
+    `HTTP ${state.status}`,
+  );
+  check("presentation state is never cached publicly", (state.headers.get("cache-control") ?? "").includes("no-cache") && Number(state.headers.get("x-server-now")) > 0, state.headers.get("cache-control") ?? "");
+  const unchanged = await fetch(`${BASE}/api/presentation/${published.slug}/state`, { headers: { "if-none-match": etag } });
+  check("unchanged presentation state answers 304", unchanged.status === 304, `HTTP ${unchanged.status}`);
+  const catalog = (await (await get("/prizes")).text()).replaceAll("<!-- -->", "");
+  check("prize catalogue lists published prizes only", catalog.includes("Smoke Published Event") && !catalog.includes("Smoke Draft Event"), "content check");
+
   const home = await (await get("/")).text();
   check("home lists published, hides draft", home.includes("Smoke Published Event") && !home.includes("Smoke Draft Event"), "content check");
 
-  for (const path of [`/api/admin/media/${draft.id}`, `/api/admin/events/${draft.id}/imports/${draft.id}/report`]) {
+  for (const path of [`/api/admin/media/${draft.id}`, `/api/admin/events/${draft.id}/imports/${draft.id}/report`, `/api/admin/raffles/${draftRaffle}/snapshot/participants`]) {
     const response = await get(path);
     check(`anonymous ${path.split("/").slice(0, 4).join("/")} refused`, response.status === 401, `HTTP ${response.status}`);
   }
@@ -96,6 +129,8 @@ async function main() {
     `/admin/events/${draft.id}/raffle`,
     `/admin/events/${draft.id}/raffle/${draftRaffle}`,
     `/admin/events/${draft.id}/raffle/${draftRaffle}/console`,
+    `/admin/events/${draft.id}/raffle/${draftRaffle}/manifest`,
+    `/admin/events/${draft.id}/raffle/${draftRaffle}/report`,
   ]) {
     const response = await get(path);
     const location = response.headers.get("location") ?? "";
@@ -140,10 +175,17 @@ async function main() {
     `/admin/events/${draft.id}/raffle`,
     `/admin/events/${draft.id}/raffle/${draftRaffle}`,
     `/admin/events/${draft.id}/raffle/${draftRaffle}/console`,
+    `/admin/events/${draft.id}/raffle/${draftRaffle}/manifest`,
+    `/admin/events/${draft.id}/raffle/${draftRaffle}/report`,
   ]) {
     const response = await get(path, cookie);
     check(`signed-in ${path}`, response.status === 200, `HTTP ${response.status}`);
   }
+  const snapshot = await get(`/api/admin/raffles/${draftRaffle}/snapshot/participants`, cookie);
+  const snapshotText = await snapshot.text();
+  check("signed-in snapshot download", snapshot.status === 200 && snapshotText.includes('"participants"') && !snapshotText.includes("Smoke Participant"), `HTTP ${snapshot.status}`);
+  const report = (await (await get(`/admin/events/${draft.id}/raffle/${draftRaffle}/report`, cookie)).text()).replaceAll("<!-- -->", "");
+  check("post-draw report runs the verifier", report.includes("Snapshot integrity") && report.includes("Passed") && !report.includes("FAILED"), "content check");
   const audit = await (await get("/admin/audit-logs", cookie)).text();
   check("audit page reports intact chain", audit.includes("Chain intact"), audit.includes("Chain broken") ? "chain broken" : "ok");
   const login2 = await get("/admin/login", cookie);

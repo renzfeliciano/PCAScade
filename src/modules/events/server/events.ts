@@ -9,6 +9,7 @@ import {
   slugify,
 } from "@/modules/events/domain/event-rules";
 import { type CachePurger, eventMediaCacheTag } from "@/modules/media/server/photo-store";
+import type { ParticipantDisplay, PresentationSettings } from "@/modules/presentation/domain/display";
 
 export type EventErrorCode = "EVENT_NOT_FOUND" | "INVALID_TRANSITION";
 
@@ -88,6 +89,26 @@ export async function changeEventStatus(database: Db, eventId: string, to: Event
     await purge([eventMediaCacheTag(eventId)]);
   }
   return updated;
+}
+
+export async function updatePublicDisplay(database: Db, eventId: string, display: ParticipantDisplay, presentation: PresentationSettings, purge: CachePurger) {
+  const result = await database.$transaction(async (tx) => {
+    const existing = await tx.event.findUnique({ where: { id: eventId }, select: { participantDisplay: true, presentation: true } });
+    if (!existing) throw new EventError("EVENT_NOT_FOUND");
+    await tx.event.update({ where: { id: eventId }, data: { participantDisplay: display, presentation } });
+    await appendAudit(tx, {
+      eventId,
+      actor: "admin",
+      action: "event.display_changed",
+      entityType: "event",
+      entityId: eventId,
+      payload: { participantDisplay: display, presentation },
+    });
+    const before = existing.participantDisplay as { photo?: unknown } | null;
+    return { photoHidden: before?.photo !== false && !display.photo };
+  });
+  if (result.photoHidden) await purge([eventMediaCacheTag(eventId)]);
+  return result;
 }
 
 export async function listEventsForAdmin(database: Db) {

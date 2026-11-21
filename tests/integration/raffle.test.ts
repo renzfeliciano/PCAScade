@@ -20,7 +20,7 @@ import {
 import { buildBundle, consoleState } from "@/modules/raffle/server/queries";
 import { decryptSeed } from "@/modules/raffle/server/seed-vault";
 import { createPrize } from "@/modules/prizes/server/prizes";
-import { createRaffleFixture, fixtureBeacon, requestTimeForFixtureRound, testDb, testSeedKey } from "./fixtures";
+import { createRaffleFixture, databaseRefusal, fixtureBeacon, requestTimeForFixtureRound, testDb, testSeedKey } from "./fixtures";
 
 const database = testDb();
 
@@ -309,17 +309,17 @@ describe("database backstops for the raffle record", () => {
     const pending = await requestDraw(database, { preparationId: fixture.preparationId, prizeId: fixture.prizeId, idempotencyKey: randomUUID(), now: requestTimeForFixtureRound });
     const committed = await completeDraw(database, { drawId: pending.drawId, beacon: fixtureBeacon, serverSeed: fixture.serverSeed });
 
-    await expect(database.rafflePreparation.update({ where: { id: fixture.preparationId }, data: { participantsJson: "{}" } })).rejects.toThrow(/snapshots of a frozen preparation/);
-    await expect(database.rafflePreparation.update({ where: { id: fixture.preparationId }, data: { status: "DRAFT" } })).rejects.toThrow(/cannot go from DRAWING to DRAFT/);
-    await expect(database.draw.update({ where: { id: committed.drawId }, data: { selectedIndex: 0 } })).rejects.toThrow(/can only be voided/);
-    await expect(database.draw.update({ where: { id: committed.drawId }, data: { status: "VOIDED" } })).rejects.toThrow(/needs a recorded correction/);
-    await expect(database.winner.updateMany({ where: { drawId: committed.drawId }, data: { voidedAt: new Date() } })).rejects.toThrow(/needs a recorded correction/);
-    await expect(database.draw.delete({ where: { id: committed.drawId } })).rejects.toThrow(/cannot be deleted/);
-    await expect(database.rafflePreparation.delete({ where: { id: fixture.preparationId } })).rejects.toThrow(/cannot be deleted/);
+    expect(await databaseRefusal(database.rafflePreparation.update({ where: { id: fixture.preparationId }, data: { participantsJson: "{}" } }))).toMatch(/snapshots of a frozen preparation/);
+    expect(await databaseRefusal(database.rafflePreparation.update({ where: { id: fixture.preparationId }, data: { status: "DRAFT" } }))).toMatch(/cannot go from DRAWING to DRAFT/);
+    expect(await databaseRefusal(database.draw.update({ where: { id: committed.drawId }, data: { selectedIndex: 0 } }))).toMatch(/can only be voided/);
+    expect(await databaseRefusal(database.draw.update({ where: { id: committed.drawId }, data: { status: "VOIDED" } }))).toMatch(/needs a recorded correction/);
+    expect(await databaseRefusal(database.winner.updateMany({ where: { drawId: committed.drawId }, data: { voidedAt: new Date() } }))).toMatch(/needs a recorded correction/);
+    expect(await databaseRefusal(database.draw.delete({ where: { id: committed.drawId } }))).toMatch(/cannot be deleted/);
+    expect(await databaseRefusal(database.rafflePreparation.delete({ where: { id: fixture.preparationId } }))).toMatch(/cannot be deleted/);
 
     const { correction } = await resetDraw(database, { drawId: committed.drawId, category: "OTHER", reason: "Backstop test" });
-    await expect(database.winnerCorrection.update({ where: { id: correction.id }, data: { reasonText: "Rewritten" } })).rejects.toThrow(/append-only/);
-    await expect(database.draw.update({ where: { id: committed.drawId }, data: { status: "COMMITTED" } })).rejects.toThrow(/voided draw cannot change/);
+    expect(await databaseRefusal(database.winnerCorrection.update({ where: { id: correction.id }, data: { reasonText: "Rewritten" } }))).toMatch(/append-only/);
+    expect(await databaseRefusal(database.draw.update({ where: { id: committed.drawId }, data: { status: "COMMITTED" } }))).toMatch(/voided draw cannot change/);
   });
 
   it("keeps the audit chain intact through the whole lifecycle", async () => {

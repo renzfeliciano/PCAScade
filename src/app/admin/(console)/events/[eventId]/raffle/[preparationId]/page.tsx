@@ -70,13 +70,19 @@ export default async function PreparationPage({ params }: PageProps<"/admin/even
           ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
-          {preparation.status === "FROZEN" || preparation.status === "DRAWING" ? (
+          {preparation.status === "FROZEN" || preparation.status === "DRAWING" || preparation.status === "COMPLETED" ? (
             <Link href={`${base}/${preparation.id}/console`} className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
-              Open draw console
+              {preparation.status === "COMPLETED" ? "Open console" : "Open draw console"}
             </Link>
           ) : null}
+          <Link href={`${base}/${preparation.id}/manifest`} className="inline-flex h-9 items-center rounded-md border border-border px-4 text-sm font-semibold hover:bg-secondary">
+            Printable manifest
+          </Link>
           {preparation.status !== "DRAFT" ? (
             <>
+              <Link href={`${base}/${preparation.id}/report`} className="inline-flex h-9 items-center rounded-md border border-border px-4 text-sm font-semibold hover:bg-secondary">
+                Post-draw report
+              </Link>
               <Link href={`/verify/${preparation.id}`} className="inline-flex h-9 items-center rounded-md border border-border px-4 text-sm font-semibold hover:bg-secondary">
                 Public verify page
               </Link>

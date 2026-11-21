@@ -17,7 +17,7 @@ export function EventTabs({ eventId, eventName }: { eventId: string; eventName: 
   const pathname = usePathname();
   const base = `/admin/events/${eventId}`;
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-3 print:hidden">
       <Link href="/admin/events" className="text-sm text-muted-foreground hover:underline">
         ← Events
       </Link>

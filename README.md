@@ -36,6 +36,7 @@ Sign in at `/admin/login`.
 | `npm run db:verify` | Check concurrent draws and the drand beacon against the database in `.env.local` |
 | `npm run verify:bundle -- <bundle.json>` | Check a downloaded verification bundle offline: snapshots, manifest, seed, drand signatures and every winner |
 | `npm run smoke:http` | HTTP checks against a running build (`SMOKE_BASE_URL`, `SMOKE_ADMIN_PASSWORD`) |
+| `npm run test:e2e` | Browser tests (Playwright) for the presentation, including a refresh during a reveal. Starts its own dev server on port 3210 against the local test database and refuses any other database |
 | `npx tsx tests/e2e/make-import-fixtures.mts <dir>` | Write messy sample participant and prize sheets with photo ZIPs for trying the import wizard |
 
 ## Docs
@@ -47,3 +48,4 @@ Sign in at `/admin/login`.
 - [Phase 2A report](docs/phases/phase-2a-report.md)
 - [Phase 2B report](docs/phases/phase-2b-report.md)
 - [Phase 3 report](docs/phases/phase-3-report.md)
+- [Phase 4 report](docs/phases/phase-4-report.md)

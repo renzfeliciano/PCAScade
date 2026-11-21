@@ -81,6 +81,21 @@ enum PreparationStatus {
   SUPERSEDED
 }
 
+enum PresentationScreen {
+  LOBBY
+  PRIZES
+  DRAW
+  WINNER_WALL
+  RECAP
+}
+
+enum RevealPhase {
+  IDLE
+  DRAWING
+  READY
+  REVEALING
+}
+
 enum DrawStatus {
   PENDING_BEACON
   COMMITTED
@@ -150,6 +165,7 @@ model Event {
   welcomeMessage     String?             @map("welcome_message")
   accent             String              @default("safety-amber")
   participantDisplay Json                @default("{\"department\":true,\"jobTitle\":true,\"bio\":false,\"photo\":true}") @map("participant_display")
+  presentation       Json                @default("{\"countdownSeconds\":5}")
   startsAt           DateTime?           @map("starts_at") @db.Timestamptz(3)
   createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -160,6 +176,7 @@ model Event {
   prizes             Prize[]
   mediaAssets        MediaAsset[]
   preparations       RafflePreparation[]
+  cursor             PresentationCursor?
 
   @@map("event")
 }
@@ -325,6 +342,7 @@ model Prize {
   category        PrizeCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   photo           MediaAsset?    @relation("PrizePhoto", fields: [photoId], references: [id], onDelete: SetNull)
   draws           Draw[]
+  cursors         PresentationCursor[]
 
   @@unique([eventId, code])
   @@index([eventId, drawOrder])
@@ -369,6 +387,8 @@ model RafflePreparation {
   draws              Draw[]
   winners            Winner[]
   corrections        WinnerCorrection[]
+  reveals            DrawReveal[]
+  cursors            PresentationCursor[]
 
   @@unique([eventId, version])
   @@map("raffle_preparation")
@@ -410,6 +430,8 @@ model Draw {
   prize               Prize             @relation(fields: [prizeId], references: [id], onDelete: Restrict)
   winner              Winner?
   correction          WinnerCorrection?
+  reveal              DrawReveal?
+  cursors             PresentationCursor[]
 
   @@unique([preparationId, sequence])
   @@index([preparationId, prizeId])
@@ -431,4 +453,36 @@ model Winner {
 
   @@index([preparationId])
   @@map("winner")
+}
+
+model PresentationCursor {
+  eventId        String             @id @map("event_id") @db.Uuid
+  preparationId  String?            @map("preparation_id") @db.Uuid
+  screen         PresentationScreen @default(LOBBY)
+  prizeId        String?            @map("prize_id") @db.Uuid
+  drawId         String?            @map("draw_id") @db.Uuid
+  phase          RevealPhase        @default(IDLE)
+  phaseStartedAt DateTime           @default(now()) @map("phase_started_at") @db.Timestamptz(3)
+  countdownMs    Int                @default(0) @map("countdown_ms")
+  sceneMs        Int                @default(0) @map("scene_ms")
+  revision       Int                @default(1)
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  event          Event              @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  preparation    RafflePreparation? @relation(fields: [preparationId], references: [id], onDelete: Restrict)
+  prize          Prize?             @relation(fields: [prizeId], references: [id], onDelete: SetNull)
+  draw           Draw?              @relation(fields: [drawId], references: [id], onDelete: Restrict)
+
+  @@map("presentation_cursor")
+}
+
+model DrawReveal {
+  drawId        String            @id @map("draw_id") @db.Uuid
+  preparationId String            @map("preparation_id") @db.Uuid
+  revealedAt    DateTime          @default(now()) @map("revealed_at") @db.Timestamptz(3)
+  visibleAt     DateTime          @map("visible_at") @db.Timestamptz(3)
+  draw          Draw              @relation(fields: [drawId], references: [id], onDelete: Restrict)
+  preparation   RafflePreparation @relation(fields: [preparationId], references: [id], onDelete: Restrict)
+
+  @@index([preparationId, visibleAt])
+  @@map("draw_reveal")
 }

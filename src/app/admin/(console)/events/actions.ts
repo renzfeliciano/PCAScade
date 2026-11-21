@@ -7,8 +7,9 @@ import { EventStatus } from "@/generated/prisma/enums";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/modules/auth/server/request-context";
 import { eventInputSchema } from "@/modules/events/domain/event-rules";
-import { EventError, changeEventStatus, createEvent, updateEvent } from "@/modules/events/server/events";
+import { EventError, changeEventStatus, createEvent, updateEvent, updatePublicDisplay } from "@/modules/events/server/events";
 import { purgeCdnCache } from "@/modules/media/server/cdn-cache";
+import { COUNTDOWN_LIMITS, participantDisplaySchema } from "@/modules/presentation/domain/display";
 
 export type EventFormValues = {
   name: string;
@@ -83,4 +84,29 @@ export async function changeEventStatusAction(_previous: StatusFormState, formDa
   revalidatePath("/admin/events");
   revalidatePath(`/admin/events/${eventId.data}`);
   return {};
+}
+
+export type DisplayFormState = { error?: string; message?: string };
+
+const countdownSchema = z.coerce.number().int().min(COUNTDOWN_LIMITS.min).max(COUNTDOWN_LIMITS.max);
+
+export async function updateDisplayAction(eventId: string, _previous: DisplayFormState, formData: FormData): Promise<DisplayFormState> {
+  await requireAdmin();
+  if (!z.uuid().safeParse(eventId).success) return { error: "This event no longer exists." };
+  const countdown = countdownSchema.safeParse(formData.get("countdownSeconds"));
+  if (!countdown.success) return { error: `Use a countdown between ${COUNTDOWN_LIMITS.min} and ${COUNTDOWN_LIMITS.max} seconds.` };
+  const display = participantDisplaySchema.parse({
+    department: formData.get("department") === "on",
+    jobTitle: formData.get("jobTitle") === "on",
+    bio: formData.get("bio") === "on",
+    photo: formData.get("photo") === "on",
+  });
+  try {
+    await updatePublicDisplay(db(), eventId, display, { countdownSeconds: countdown.data }, purgeCdnCache);
+  } catch (error) {
+    if (error instanceof EventError) return { error: "This event no longer exists." };
+    throw error;
+  }
+  revalidatePath(`/admin/events/${eventId}`);
+  return { message: "Saved. The presentation and public pages use these settings from now on." };
 }

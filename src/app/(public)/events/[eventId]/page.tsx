@@ -2,10 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { accentStyle, formatEventDate } from "@/components/brand/event-accent";
+import { PrizeGrid } from "@/components/public/prize-grid";
+import { WinnerList } from "@/components/public/winner-list";
 import { Badge } from "@/components/ui/badge";
 import { db } from "@/lib/db";
 import { EVENT_STATUS_LABELS } from "@/modules/events/domain/event-rules";
 import { getPublicEventBySlug } from "@/modules/events/server/events";
+import { publicEventExtras } from "@/modules/presentation/server/public-pages";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +24,7 @@ export default async function EventPage({ params }: PageProps<"/events/[eventId]
   if (!event) notFound();
   const when = formatEventDate(event.startsAt);
   const presentable = event.status === "PUBLISHED" || event.status === "LIVE";
+  const extras = await publicEventExtras(db(), event.id);
 
   return (
     <div style={accentStyle(event.accent)}>
@@ -49,10 +53,30 @@ export default async function EventPage({ params }: PageProps<"/events/[eventId]
               Open presentation
             </Link>
           ) : null}
+          {extras?.winners.preparationId ? (
+            <Link
+              href={`/verify/${extras.winners.preparationId}`}
+              className="inline-flex h-10 items-center rounded-md border border-border px-5 text-sm font-semibold hover:bg-secondary"
+            >
+              Verify the draw
+            </Link>
+          ) : null}
           <Link href="/events" className="inline-flex h-10 items-center rounded-md border border-border px-5 text-sm font-semibold hover:bg-secondary">
             All events
           </Link>
         </div>
+        {extras && extras.winners.total > 0 ? (
+          <section className="grid gap-4">
+            <h2 className="text-2xl font-bold">Winners</h2>
+            <WinnerList prizes={extras.winners.prizes} />
+          </section>
+        ) : null}
+        {extras && extras.prizes.length > 0 ? (
+          <section className="grid gap-4">
+            <h2 className="text-2xl font-bold">Prizes</h2>
+            <PrizeGrid prizes={extras.prizes} />
+          </section>
+        ) : null}
       </div>
     </div>
   );

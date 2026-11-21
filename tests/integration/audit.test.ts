@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { appendAudit, recordAudit, verifyAuditChain } from "@/modules/audit/server/audit-log";
-import { testDb } from "./fixtures";
+import { databaseRefusal, testDb } from "./fixtures";
 
 const database = testDb();
 
@@ -33,9 +33,9 @@ describe("audit chain in PostgreSQL", () => {
   it("refuses updates, deletes and truncation", async () => {
     await recordAudit(database, { actor: "system", action: "test.immutable", entityType: "test" });
     const latest = await database.auditLog.findFirstOrThrow({ orderBy: { seq: "desc" } });
-    await expect(database.auditLog.update({ where: { seq: latest.seq }, data: { payload: "{}" } })).rejects.toThrow(/append-only/);
-    await expect(database.auditLog.delete({ where: { seq: latest.seq } })).rejects.toThrow(/append-only/);
-    await expect(database.$executeRawUnsafe("TRUNCATE audit_log")).rejects.toThrow(/append-only/);
+    expect(await databaseRefusal(database.auditLog.update({ where: { seq: latest.seq }, data: { payload: "{}" } }))).toMatch(/append-only/);
+    expect(await databaseRefusal(database.auditLog.delete({ where: { seq: latest.seq } }))).toMatch(/append-only/);
+    expect(await databaseRefusal(database.$executeRawUnsafe("TRUNCATE audit_log"))).toMatch(/append-only/);
     expect(await verifyAuditChain(database)).toMatchObject({ ok: true });
   });
 

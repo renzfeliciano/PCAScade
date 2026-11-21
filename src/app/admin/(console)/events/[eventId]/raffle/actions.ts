@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { serverEnv } from "@/lib/env";
 import { requireAdmin } from "@/modules/auth/server/request-context";
 import { BeaconUnavailableError } from "@/modules/beacon/drand";
+import { PresentationError, beginDraw, drawAbandoned, drawCommitted, drawWithdrawn, showScreen, startReveal } from "@/modules/presentation/server/cursor";
 import { raffleRulesSchema } from "@/modules/raffle/domain/snapshot";
 import { DrawError, type DrawErrorCode } from "@/modules/raffle/server/draw";
 import {
@@ -55,7 +56,7 @@ const DRAW_MESSAGES: Record<DrawErrorCode, string> = {
 };
 
 function failure(error: unknown): RaffleActionState {
-  if (error instanceof RaffleError) return { error: error.message };
+  if (error instanceof RaffleError || error instanceof PresentationError) return { error: error.message };
   if (error instanceof DrawError) return { error: DRAW_MESSAGES[error.code] };
   if (error instanceof BeaconUnavailableError) {
     return { error: "The drand beacon could not be reached. The draw is saved and waiting; press Retry beacon when the network is back. The result cannot change." };
@@ -68,6 +69,7 @@ function refresh(eventId: string, preparationId?: string) {
   if (preparationId) {
     revalidatePath(`/admin/events/${eventId}/raffle/${preparationId}`);
     revalidatePath(`/admin/events/${eventId}/raffle/${preparationId}/console`);
+    revalidatePath(`/admin/events/${eventId}/raffle/${preparationId}/report`);
   }
 }
 
@@ -173,11 +175,14 @@ export async function drawAction(eventId: string, preparationId: string, _previo
   if (!parsed.success) return { error: "Refresh the console and try again." };
   const database = db();
   const env = serverEnv();
+  let prizeOnScreen: string | null = null;
   try {
     const preparation = await database.rafflePreparation.findUnique({ where: { id: preparationId }, select: { eventId: true, seedCiphertext: true } });
     if (!preparation || preparation.eventId !== eventId || !preparation.seedCiphertext) return { error: "This raffle is not open for drawing." };
     const serverSeed = decryptSeed(seedKey(), preparationId, new Uint8Array(preparation.seedCiphertext));
     const { prizeId, slot, generation } = parsed.data;
+    prizeOnScreen = prizeId;
+    await beginDraw(database, { eventId, preparationId, prizeId });
     const result = await runDraw(database, {
       preparationId,
       prizeId,
@@ -186,9 +191,11 @@ export async function drawAction(eventId: string, preparationId: string, _previo
       serverSeed,
       relays: env.DRAND_RELAYS,
     });
+    await drawCommitted(database, { eventId, prizeId, drawId: result.drawId });
     refresh(eventId, preparationId);
     return { message: `Slot ${result.slotNumber} drawn from ${result.candidateCount} ${result.candidateCount === 1 ? "candidate" : "candidates"} (beacon round ${result.targetRound}).` };
   } catch (error) {
+    if (prizeOnScreen && !(error instanceof BeaconUnavailableError)) await drawAbandoned(database, { eventId, prizeId: prizeOnScreen });
     refresh(eventId, preparationId);
     return failure(error);
   }
@@ -202,7 +209,8 @@ export async function finishDrawAction(eventId: string, preparationId: string, d
     const preparation = await database.rafflePreparation.findUnique({ where: { id: preparationId }, select: { eventId: true, seedCiphertext: true } });
     if (!preparation || preparation.eventId !== eventId || !preparation.seedCiphertext) return { error: "This raffle is not open for drawing." };
     const serverSeed = decryptSeed(seedKey(), preparationId, new Uint8Array(preparation.seedCiphertext));
-    await finishPendingDraw(database, drawId, { serverSeed, relays: serverEnv().DRAND_RELAYS });
+    const result = await finishPendingDraw(database, drawId, { serverSeed, relays: serverEnv().DRAND_RELAYS });
+    await drawCommitted(database, { eventId, prizeId: result.prizeId, drawId: result.drawId });
     refresh(eventId, preparationId);
     return { message: "Beacon received and the draw is committed." };
   } catch (error) {
@@ -223,9 +231,43 @@ export async function resetDrawAction(eventId: string, preparationId: string, dr
     const owner = await db().draw.findUnique({ where: { id: drawId }, select: { preparationId: true } });
     if (owner?.preparationId !== preparationId) return { error: "That draw is not part of this raffle." };
     await resetDraw(db(), { drawId, category: parsed.data.category as (typeof CORRECTION_REASONS)[number]["key"], reason: parsed.data.reason });
+    await drawWithdrawn(db(), drawId);
   } catch (error) {
     return failure(error);
   }
   refresh(eventId, preparationId);
   return { message: "Reset recorded. The slot is open for a new draw." };
+}
+
+export async function revealAction(eventId: string, preparationId: string, drawId: string, _previous: RaffleActionState): Promise<RaffleActionState> {
+  await requireAdmin();
+  if (!validIds(eventId, preparationId, drawId)) return { error: "That draw no longer exists." };
+  try {
+    const owner = await db().draw.findUnique({ where: { id: drawId }, select: { preparationId: true } });
+    if (owner?.preparationId !== preparationId) return { error: "That draw is not part of this raffle." };
+    const result = await startReveal(db(), { eventId, drawId });
+    refresh(eventId, preparationId);
+    return { message: result.replayed ? "Already revealing on the presentation screen." : result.firstReveal ? "Revealing on the presentation screen." : "Replaying the reveal." };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+const SCREENS = ["LOBBY", "PRIZES", "DRAW", "WINNER_WALL", "RECAP"] as const;
+const screenSchema = z.object({ screen: z.enum(SCREENS), prizeId: z.uuid().optional() });
+
+export async function showScreenAction(eventId: string, preparationId: string, _previous: RaffleActionState, formData: FormData): Promise<RaffleActionState> {
+  await requireAdmin();
+  if (!validIds(eventId, preparationId)) return { error: "This raffle no longer exists." };
+  const parsed = screenSchema.safeParse({ screen: formData.get("screen"), prizeId: formData.get("prizeId") || undefined });
+  if (!parsed.success) return { error: "Choose a screen to show." };
+  try {
+    const preparation = await db().rafflePreparation.findUnique({ where: { id: preparationId }, select: { eventId: true } });
+    if (preparation?.eventId !== eventId) return { error: "This raffle no longer exists." };
+    await showScreen(db(), { eventId, preparationId, screen: parsed.data.screen, prizeId: parsed.data.prizeId ?? null });
+  } catch (error) {
+    return failure(error);
+  }
+  refresh(eventId, preparationId);
+  return { message: "Presentation screen changed." };
 }

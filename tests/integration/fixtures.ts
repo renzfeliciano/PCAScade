@@ -9,6 +9,16 @@ import { liveSnapshots } from "@/modules/raffle/server/live-snapshot";
 import { encryptSeed } from "@/modules/raffle/server/seed-vault";
 import { DRAND_FIXTURE_ROUND } from "../fixtures/drand";
 
+export async function databaseRefusal(action: Promise<unknown>): Promise<string> {
+  try {
+    await action;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return /Message: `([\s\S]*?)`/.exec(message)?.[1] ?? "unrecognised error format";
+  }
+  return "not refused";
+}
+
 export function testDb(): Db {
   const url = process.env.TEST_DATABASE_URL;
   if (!url) throw new Error("TEST_DATABASE_URL is missing");

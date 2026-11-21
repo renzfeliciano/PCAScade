@@ -71,9 +71,17 @@ export function eventMediaCacheTag(eventId: string): string {
 
 export type PublicImageMeta = { mimeType: string; etag: string; cacheTags: string[] };
 
+function publicAssetWhere(assetId: string) {
+  return {
+    id: assetId,
+    event: { status: { in: [...PUBLIC_EVENT_STATUSES] } },
+    OR: [{ kind: { not: "PARTICIPANT_PHOTO" as const } }, { event: { participantDisplay: { path: ["photo"], not: false } } }],
+  };
+}
+
 export async function readPublicImageMeta(database: Db, assetId: string): Promise<PublicImageMeta | null> {
   const asset = await database.mediaAsset.findFirst({
-    where: { id: assetId, event: { status: { in: [...PUBLIC_EVENT_STATUSES] } } },
+    where: publicAssetWhere(assetId),
     select: { eventId: true, mimeType: true, sha256: true },
   });
   if (!asset) return null;
@@ -86,7 +94,7 @@ export async function readPublicImageMeta(database: Db, assetId: string): Promis
 
 export async function readPublicImage(database: Db, assetId: string) {
   const asset = await database.mediaAsset.findFirst({
-    where: { id: assetId, event: { status: { in: [...PUBLIC_EVENT_STATUSES] } } },
+    where: publicAssetWhere(assetId),
     select: { eventId: true, mimeType: true, sha256: true, blob: { select: { data: true } } },
   });
   if (!asset?.blob) return null;

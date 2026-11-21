@@ -75,6 +75,7 @@ export type SlotDraw = {
   targetRound: string;
   participant: { id: string; fullName: string; externalId: string; department: string | null } | null;
   correction: { category: string; reason: string; createdAt: Date } | null;
+  revealedAt: Date | null;
 };
 
 export type ConsoleSlot = { slotNumber: number; generation: number; active: SlotDraw | null; voided: SlotDraw[] };
@@ -90,6 +91,7 @@ export async function consoleState(database: Db, preparationId: string): Promise
     include: {
       winner: { include: { participant: { select: { id: true, fullName: true, externalId: true, department: true } } } },
       correction: true,
+      reveal: { select: { revealedAt: true } },
     },
   });
   return prizes.map((prize) => {
@@ -105,6 +107,7 @@ export async function consoleState(database: Db, preparationId: string): Promise
         targetRound: draw.beaconRound?.toString() ?? "",
         participant: draw.winner?.participant ?? null,
         correction: draw.correction ? { category: draw.correction.reasonCategory, reason: draw.correction.reasonText, createdAt: draw.correction.createdAt } : null,
+        revealedAt: draw.reveal?.revealedAt ?? null,
       };
       if (draw.status === "VOIDED") {
         slot.voided.push(entry);

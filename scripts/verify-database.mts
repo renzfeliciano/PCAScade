@@ -68,6 +68,8 @@ async function createScratchRaffle(database: Db, tag: string, participants: numb
 async function removeScratchEvent(database: Db, eventId: string) {
   await database.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('pcascade.allow_purge', 'on', true)`;
+    await tx.presentationCursor.deleteMany({ where: { eventId } });
+    await tx.drawReveal.deleteMany({ where: { preparation: { eventId } } });
     await tx.winnerCorrection.deleteMany({ where: { preparation: { eventId } } });
     await tx.winner.deleteMany({ where: { preparation: { eventId } } });
     await tx.draw.deleteMany({ where: { preparation: { eventId } } });

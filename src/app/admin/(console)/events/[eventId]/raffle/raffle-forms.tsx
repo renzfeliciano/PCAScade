@@ -16,6 +16,8 @@ import {
   freshStartAction,
   prepareRaffleAction,
   resetDrawAction,
+  revealAction,
+  showScreenAction,
   updateRulesAction,
 } from "./actions";
 
@@ -253,5 +255,33 @@ export function ResetForm({ eventId, preparationId, drawId, label }: { eventId: 
         </div>
       </form>
     </details>
+  );
+}
+
+export function RevealForm({ eventId, preparationId, drawId, revealed }: { eventId: string; preparationId: string; drawId: string; revealed: boolean }) {
+  const [state, action, pending] = useActionState(revealAction.bind(null, eventId, preparationId, drawId), {});
+  return (
+    <form action={action} className="grid gap-2">
+      <div>
+        <Button type="submit" size="sm" variant={revealed ? "outline" : "default"} disabled={pending}>
+          {pending ? "Starting…" : revealed ? "Replay reveal" : "Reveal on screen"}
+        </Button>
+      </div>
+      <ActionFeedback state={state} />
+    </form>
+  );
+}
+
+export function ScreenForm({ eventId, preparationId, screen, prizeId, label, active }: { eventId: string; preparationId: string; screen: string; prizeId?: string; label: string; active: boolean }) {
+  const [state, action, pending] = useActionState(showScreenAction.bind(null, eventId, preparationId), {});
+  return (
+    <form action={action} className="grid gap-1">
+      <input type="hidden" name="screen" value={screen} />
+      {prizeId ? <input type="hidden" name="prizeId" value={prizeId} /> : null}
+      <Button type="submit" size="sm" variant={active ? "default" : "outline"} disabled={pending} aria-pressed={active}>
+        {label}
+      </Button>
+      {state.error ? <p className="text-xs text-destructive">{state.error}</p> : null}
+    </form>
   );
 }

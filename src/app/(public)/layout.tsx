@@ -3,6 +3,8 @@ import { BRAND_ASSOCIATION, BrandLockup } from "@/components/brand/brand-mark";
 
 const NAV = [
   { href: "/events", label: "Events" },
+  { href: "/prizes", label: "Prizes" },
+  { href: "/winners", label: "Winners" },
   { href: "/about", label: "About" },
 ];
 

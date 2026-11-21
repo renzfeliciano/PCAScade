@@ -19,7 +19,7 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/admin">)
   await requireAdmin();
   return (
     <div className="flex flex-1 flex-col md:flex-row">
-      <aside className="border-b border-border bg-card md:w-60 md:shrink-0 md:border-r md:border-b-0">
+      <aside className="border-b border-border bg-card print:hidden md:w-60 md:shrink-0 md:border-r md:border-b-0">
         <div className="flex items-center justify-between gap-4 px-4 py-4 md:flex-col md:items-stretch md:gap-6 md:py-6">
           <Link href="/admin" className="rounded-sm">
             <BrandLockup compact />
@@ -38,7 +38,7 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/admin">)
           </form>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 px-4 py-8 sm:px-8">{children}</main>
+      <main className="min-w-0 flex-1 px-4 py-8 sm:px-8 print:p-0">{children}</main>
     </div>
   );
 }
