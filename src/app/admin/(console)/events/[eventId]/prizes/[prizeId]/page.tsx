@@ -6,9 +6,10 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/modules/auth/server/request-context";
 import { listCategories } from "@/modules/prizes/server/categories";
 import { getPrize } from "@/modules/prizes/server/prizes";
+import { parseEligibilityRule } from "@/modules/raffle/domain/snapshot";
 import { updatePrizeAction } from "../actions";
 import { PrizeForm } from "../prize-form";
-import { PrizePhoto, PrizeStatusAndDelete } from "./prize-controls";
+import { PrizeEligibility, PrizePhoto, PrizeStatusAndDelete } from "./prize-controls";
 
 export const metadata: Metadata = { title: "Prize" };
 
@@ -19,8 +20,14 @@ export default async function PrizePage({ params }: PageProps<"/admin/events/[ev
   const { eventId, prizeId } = await params;
   if (!UUID.test(prizeId)) notFound();
   const database = db();
-  const [prize, categories] = await Promise.all([getPrize(database, eventId, prizeId), listCategories(database, eventId)]);
+  const [prize, categories, departmentRows] = await Promise.all([
+    getPrize(database, eventId, prizeId),
+    listCategories(database, eventId),
+    database.participant.findMany({ where: { eventId, department: { not: null } }, distinct: ["department"], select: { department: true }, orderBy: { department: "asc" }, take: 200 }),
+  ]);
   if (!prize) notFound();
+  const rule = parseEligibilityRule(prize.eligibilityRule);
+  const departments = [...new Set([...departmentRows.map((row) => row.department ?? ""), ...rule.departments].filter(Boolean))].sort((a, b) => a.localeCompare(b));
 
   return (
     <div className="grid gap-6">
@@ -53,6 +60,14 @@ export default async function PrizePage({ params }: PageProps<"/admin/events/[ev
             </CardHeader>
             <CardContent>
               <PrizePhoto key={prize.photoId ?? "none"} eventId={eventId} prizeId={prizeId} photoId={prize.photoId} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Who can win</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PrizeEligibility eventId={eventId} prizeId={prizeId} departments={departments} selected={rule.departments} />
             </CardContent>
           </Card>
           <Card>

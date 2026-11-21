@@ -2,8 +2,11 @@ import { config } from "dotenv";
 import { createDb } from "@/lib/db";
 import { changeEventStatus, createEvent } from "@/modules/events/server/events";
 import { eventInputSchema } from "@/modules/events/domain/event-rules";
+import { createPreparation, freezePreparation } from "@/modules/raffle/server/preparations";
+import { seedKeyFromBase64 } from "@/modules/raffle/server/seed-vault";
 
 config({ path: ".env.test", quiet: true });
+config({ path: ".env.local", quiet: true });
 
 const BASE = process.env.SMOKE_BASE_URL ?? "http://localhost:3100";
 const PASSWORD = process.env.SMOKE_ADMIN_PASSWORD ?? "";
@@ -35,6 +38,16 @@ async function main() {
   const published = await createEvent(database, input("Smoke Published Event"));
   await changeEventStatus(database, published.id, "PUBLISHED", async () => {});
   const draft = await createEvent(database, input("Smoke Draft Event"));
+  const seedKey = seedKeyFromBase64(process.env.RAFFLE_SEED_ENCRYPTION_KEY ?? "");
+  const sealRaffle = async (eventId: string) => {
+    await database.participant.create({ data: { eventId, externalId: "SMOKE-1", fullName: "Smoke Participant" } });
+    await database.prize.create({ data: { eventId, code: "SMOKE", name: "Smoke prize", quantity: 1, drawOrder: 1 } });
+    const prepared = await createPreparation(database, { eventId, rules: { repeatWinners: "never", voidedWinnerRedraw: "excluded" }, seedKey });
+    await freezePreparation(database, { preparationId: prepared.id, expectedManifestSha256: Buffer.from(prepared.manifestSha256 ?? []).toString("hex") });
+    return prepared.id;
+  };
+  const publishedRaffle = await sealRaffle(published.id);
+  const draftRaffle = await sealRaffle(draft.id);
 
   for (const path of ["/", "/events", "/about", `/events/${published.slug}`, `/presentation/${published.slug}`]) {
     const response = await get(path);
@@ -44,6 +57,18 @@ async function main() {
     const response = await get(path);
     check(`draft hidden ${path}`, response.status === 404, `HTTP ${response.status}`);
   }
+  const verify = await get(`/verify/${publishedRaffle}`);
+  const verifyHtml = (await verify.text()).replaceAll("<!-- -->", "");
+  check("public verify page", verify.status === 200 && verifyHtml.includes("Raffle v1 verification") && verifyHtml.includes("Resets are allowed and unlimited"), `HTTP ${verify.status}`);
+  check("verify page withholds the seed before the raffle ends", !verifyHtml.includes('"revealedSeed":"') && verifyHtml.includes("not revealed yet"), "content check");
+  const bundle = await get(`/verify/${publishedRaffle}/bundle`);
+  const bundleBody = (await bundle.json().catch(() => ({}))) as { format?: string; preparation?: { revealedSeed?: string | null } };
+  check("public verification bundle", bundle.status === 200 && bundleBody.format === "pcascade-verification-bundle/v1" && bundleBody.preparation?.revealedSeed === null, `HTTP ${bundle.status}`);
+  for (const path of [`/verify/${draftRaffle}`, `/verify/${draftRaffle}/bundle`, `/verify/${draft.id}`, "/verify/not-a-uuid"]) {
+    const response = await get(path);
+    check(`hidden ${path.replace(/[0-9a-f-]{36}/, "<id>")}`, response.status === 404, `HTTP ${response.status}`);
+  }
+
   const home = await (await get("/")).text();
   check("home lists published, hides draft", home.includes("Smoke Published Event") && !home.includes("Smoke Draft Event"), "content check");
 
@@ -68,6 +93,9 @@ async function main() {
     `/admin/events/${draft.id}/prizes`,
     `/admin/events/${draft.id}/prizes/new`,
     `/admin/events/${draft.id}/prizes/categories`,
+    `/admin/events/${draft.id}/raffle`,
+    `/admin/events/${draft.id}/raffle/${draftRaffle}`,
+    `/admin/events/${draft.id}/raffle/${draftRaffle}/console`,
   ]) {
     const response = await get(path);
     const location = response.headers.get("location") ?? "";
@@ -109,6 +137,9 @@ async function main() {
     `/admin/events/${draft.id}/prizes`,
     `/admin/events/${draft.id}/prizes/new`,
     `/admin/events/${draft.id}/prizes/categories`,
+    `/admin/events/${draft.id}/raffle`,
+    `/admin/events/${draft.id}/raffle/${draftRaffle}`,
+    `/admin/events/${draft.id}/raffle/${draftRaffle}/console`,
   ]) {
     const response = await get(path, cookie);
     check(`signed-in ${path}`, response.status === 200, `HTTP ${response.status}`);

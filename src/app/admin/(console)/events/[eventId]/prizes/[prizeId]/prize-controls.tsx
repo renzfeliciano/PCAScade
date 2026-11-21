@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { ActionFeedback, PhotoPanel } from "@/components/admin/photo-panel";
 import { Button } from "@/components/ui/button";
 import { PRIZE_PHOTO_MAX_SIDE } from "@/modules/prizes/domain/prizes";
-import { deletePrizeAction, setPrizeStatusAction, uploadPrizePhotoAction } from "../actions";
+import { deletePrizeAction, setPrizeEligibilityAction, setPrizeStatusAction, uploadPrizePhotoAction } from "../actions";
 
 export function PrizePhoto({ eventId, prizeId, photoId }: { eventId: string; prizeId: string; photoId: string | null }) {
   return <PhotoPanel action={uploadPrizePhotoAction.bind(null, eventId, prizeId)} photoId={photoId} alt="Current prize photo" maxSide={PRIZE_PHOTO_MAX_SIDE} />;
@@ -50,5 +50,31 @@ export function PrizeStatusAndDelete({ eventId, prizeId, available, drawn }: { e
       )}
       <ActionFeedback state={deleteState} />
     </div>
+  );
+}
+
+export function PrizeEligibility({ eventId, prizeId, departments, selected }: { eventId: string; prizeId: string; departments: string[]; selected: string[] }) {
+  const [state, action, pending] = useActionState(setPrizeEligibilityAction.bind(null, eventId, prizeId), {});
+  const chosen = new Set(selected.map((department) => department.toLowerCase()));
+  if (departments.length === 0) return <p className="text-sm text-muted-foreground">Add departments to participants to limit this prize to some of them. Everyone can win it now.</p>;
+  return (
+    <form action={action} className="grid gap-3">
+      <p className="text-sm text-muted-foreground">Leave all unticked to let everyone win. Tick departments to limit the prize to them.</p>
+      <fieldset className="grid max-h-56 gap-1 overflow-y-auto">
+        <legend className="sr-only">Departments that can win</legend>
+        {departments.map((department) => (
+          <label key={department} className="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="departments" value={department} defaultChecked={chosen.has(department.toLowerCase())} />
+            {department}
+          </label>
+        ))}
+      </fieldset>
+      <ActionFeedback state={state} />
+      <div>
+        <Button type="submit" size="sm" variant="outline" disabled={pending}>
+          {pending ? "Saving…" : "Save who can win"}
+        </Button>
+      </div>
+    </form>
   );
 }

@@ -1,12 +1,12 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { BeaconUnavailableError, QUICKNET, roundTime } from "@/modules/beacon/drand";
-import { rosterDigest } from "@/modules/raffle/domain/roster";
-import { candidateListDigest, deriveSelectionKey, selectIndex, sortCandidates } from "@/modules/raffle/domain/select";
+import { verifyBundle } from "@/modules/raffle/domain/verify";
 import { type CommittedDraw, DrawError, completeDraw, requestDraw } from "@/modules/raffle/server/draw";
+import { buildBundle } from "@/modules/raffle/server/queries";
 import { runDraw } from "@/modules/raffle/server/run-draw";
 import { DRAND_FIXTURE_ROUND } from "../fixtures/drand";
-import { addPrize, createRaffleFixture, fixtureBeacon, requestTimeForFixtureRound, testDb, type RaffleFixture } from "./fixtures";
+import { createRaffleFixture, fixtureBeacon, requestTimeForFixtureRound, testDb, type RaffleFixture } from "./fixtures";
 
 const database = testDb();
 
@@ -68,8 +68,8 @@ describe("requestDraw", () => {
   });
 
   it("refuses to reuse an idempotency key for a different prize", async () => {
-    const fixture = await createRaffleFixture(database, { participants: 10, quantity: 3 });
-    const otherPrize = await addPrize(database, fixture.eventId, 1);
+    const fixture = await createRaffleFixture(database, { participants: 10, quantity: 3, extraPrizes: [{ quantity: 1 }] });
+    const otherPrize = fixture.extraPrizeIds[0] ?? "";
     const key = randomUUID();
     await request(fixture, key);
     await expect(request(fixture, key, otherPrize)).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
@@ -158,7 +158,7 @@ describe("completeDraw", () => {
   });
 
   it("fills every slot once without repeating a winner, then reports exhaustion and an empty pool", async () => {
-    const fixture = await createRaffleFixture(database, { participants: 3, quantity: 3, repeatWinners: "never" });
+    const fixture = await createRaffleFixture(database, { participants: 3, quantity: 3, repeatWinners: "never", extraPrizes: [{ quantity: 1 }] });
     const results: CommittedDraw[] = [];
     for (let index = 0; index < 3; index++) results.push(await drawOnce(fixture));
     expect(results.map((result) => result.slotNumber)).toEqual([1, 2, 3]);
@@ -166,42 +166,35 @@ describe("completeDraw", () => {
     expect(new Set(results.map((result) => result.participantId)).size).toBe(3);
     await expect(request(fixture)).rejects.toMatchObject({ code: "PRIZE_EXHAUSTED" });
 
-    const secondPrize = await addPrize(database, fixture.eventId, 1);
+    const secondPrize = fixture.extraPrizeIds[0] ?? "";
     await expect(request(fixture, randomUUID(), secondPrize)).rejects.toMatchObject({ code: "NO_ELIGIBLE_PARTICIPANTS" });
   });
 
   it("can be reproduced from the stored record plus the revealed seed", async () => {
     const fixture = await createRaffleFixture(database, { participants: 25, quantity: 2, ineligible: 5 });
     await drawOnce(fixture);
-    const second = await drawOnce(fixture);
+    await drawOnce(fixture);
+    const bundle = await buildBundle(database, fixture.preparationId);
+    if (!bundle) throw new Error("bundle missing");
+    const sealedOnly = verifyBundle(bundle);
+    expect(sealedOnly.ok).toBe(true);
+    expect(sealedOnly.complete).toBe(false);
+    expect(sealedOnly.draws.map((draw) => draw.result.ok)).toEqual([null, null]);
 
-    const preparation = await database.rafflePreparation.findUniqueOrThrow({ where: { id: fixture.preparationId } });
-    const draw = await database.draw.findUniqueOrThrow({ where: { id: second.drawId }, include: { winner: true } });
-    const priorWinners = await database.winner.findMany({
-      where: { preparationId: fixture.preparationId, draw: { sequence: { lt: draw.sequence } } },
-      select: { participantId: true },
-    });
-    const excluded = new Set(priorWinners.map((winner) => winner.participantId));
-    const candidates = sortCandidates(fixture.eligibleIds.filter((id) => !excluded.has(id)));
+    const report = verifyBundle({ ...bundle, preparation: { ...bundle.preparation, revealedSeed: Buffer.from(fixture.serverSeed).toString("hex") } });
+    expect(report.complete).toBe(true);
+    expect(report.draws.map((draw) => [draw.beacon.ok, draw.candidates.ok, draw.result.ok])).toEqual([
+      [true, true, true],
+      [true, true, true],
+    ]);
 
-    expect(Buffer.from(rosterDigest(fixture.eligibleIds)).equals(Buffer.from(preparation.participantsSha256 ?? []))).toBe(true);
-    expect(Buffer.from(candidateListDigest(candidates)).equals(Buffer.from(draw.candidateListSha256 ?? []))).toBe(true);
-
-    const key = deriveSelectionKey({
-      preparationId: preparation.id,
-      participantsSha256: preparation.participantsSha256 ?? new Uint8Array(),
-      rulesSha256: preparation.rulesSha256 ?? new Uint8Array(),
-      drawSequence: draw.sequence,
-      prizeId: draw.prizeId,
-      slotNumber: draw.slotNumber,
-      candidateListSha256: candidateListDigest(candidates),
-      serverSeed: fixture.serverSeed,
-      beaconRound: draw.beaconRound ?? 0n,
-      beaconRandomness: fixtureBeacon.randomness,
-    });
-    const { index } = selectIndex(key, candidates.length);
-    expect(index).toBe(draw.selectedIndex);
-    expect(candidates[index]).toBe(draw.winner?.participantId);
+    const tampered = structuredClone(bundle);
+    const second = tampered.draws[1];
+    if (!second) throw new Error("second draw missing");
+    second.participantId = fixture.eligibleIds.find((id) => id !== second.participantId) ?? null;
+    const tamperedReport = verifyBundle({ ...tampered, preparation: { ...tampered.preparation, revealedSeed: Buffer.from(fixture.serverSeed).toString("hex") } });
+    expect(tamperedReport.ok).toBe(false);
+    expect(tamperedReport.draws[1]?.result.ok).toBe(false);
   });
 
   it("rolls back completely when the commit fails mid-transaction", async () => {

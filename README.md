@@ -34,6 +34,7 @@ Sign in at `/admin/login`.
 | `npm test` | Unit and integration tests |
 | `npm run admin:bootstrap` | Create the single administrator (`-- --reset` to replace a lost password) |
 | `npm run db:verify` | Check concurrent draws and the drand beacon against the database in `.env.local` |
+| `npm run verify:bundle -- <bundle.json>` | Check a downloaded verification bundle offline: snapshots, manifest, seed, drand signatures and every winner |
 | `npm run smoke:http` | HTTP checks against a running build (`SMOKE_BASE_URL`, `SMOKE_ADMIN_PASSWORD`) |
 | `npx tsx tests/e2e/make-import-fixtures.mts <dir>` | Write messy sample participant and prize sheets with photo ZIPs for trying the import wizard |
 
@@ -45,3 +46,4 @@ Sign in at `/admin/login`.
 - [Phase 1 report](docs/phases/phase-1-report.md)
 - [Phase 2A report](docs/phases/phase-2a-report.md)
 - [Phase 2B report](docs/phases/phase-2b-report.md)
+- [Phase 3 report](docs/phases/phase-3-report.md)

@@ -1,11 +1,8 @@
 import type { Db } from "@/lib/db";
 import { BeaconUnavailableError, fetchRound, roundTime } from "@/modules/beacon/drand";
-import { type CommittedDraw, completeDraw, requestDraw } from "@/modules/raffle/server/draw";
+import { type CommittedDraw, type DrawState, DrawError, completeDraw, requestDraw } from "@/modules/raffle/server/draw";
 
-export type RunDrawInput = {
-  preparationId: string;
-  prizeId: string;
-  idempotencyKey: string;
+type BeaconOptions = {
   serverSeed: Uint8Array;
   relays: readonly string[];
   fetchImpl?: typeof fetch;
@@ -15,28 +12,28 @@ export type RunDrawInput = {
   fetchAttempts?: number;
 };
 
+export type RunDrawInput = BeaconOptions & {
+  preparationId: string;
+  prizeId: string;
+  idempotencyKey: string;
+  slotNumber?: number;
+};
+
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-export async function runDraw(database: Db, input: RunDrawInput): Promise<CommittedDraw> {
-  const now = input.now ?? Date.now;
-  const sleep = input.sleep ?? defaultSleep;
-  const state = await requestDraw(database, {
-    preparationId: input.preparationId,
-    prizeId: input.prizeId,
-    idempotencyKey: input.idempotencyKey,
-    now: now(),
-  });
+async function awaitBeaconAndCommit(database: Db, state: DrawState, options: BeaconOptions): Promise<CommittedDraw> {
   if (state.status === "COMMITTED") return state;
-
-  const waitMs = roundTime(state.targetRound) + (input.publishGraceMs ?? 500) - now();
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? defaultSleep;
+  const waitMs = roundTime(state.targetRound) + (options.publishGraceMs ?? 500) - now();
   if (waitMs > 0) await sleep(waitMs);
 
-  const attempts = input.fetchAttempts ?? 5;
+  const attempts = options.fetchAttempts ?? 5;
   let lastError: unknown;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      const beacon = await fetchRound(state.targetRound, { relays: input.relays, fetchImpl: input.fetchImpl });
-      return await completeDraw(database, { drawId: state.drawId, beacon, serverSeed: input.serverSeed });
+      const beacon = await fetchRound(state.targetRound, { relays: options.relays, fetchImpl: options.fetchImpl });
+      return await completeDraw(database, { drawId: state.drawId, beacon, serverSeed: options.serverSeed });
     } catch (error) {
       if (!(error instanceof BeaconUnavailableError)) throw error;
       lastError = error;
@@ -44,4 +41,36 @@ export async function runDraw(database: Db, input: RunDrawInput): Promise<Commit
     }
   }
   throw lastError;
+}
+
+export async function runDraw(database: Db, input: RunDrawInput): Promise<CommittedDraw> {
+  const now = input.now ?? Date.now;
+  const state = await requestDraw(database, {
+    preparationId: input.preparationId,
+    prizeId: input.prizeId,
+    idempotencyKey: input.idempotencyKey,
+    slotNumber: input.slotNumber,
+    now: now(),
+  });
+  return awaitBeaconAndCommit(database, state, input);
+}
+
+export async function finishPendingDraw(database: Db, drawId: string, options: BeaconOptions): Promise<CommittedDraw> {
+  const draw = await database.draw.findUnique({ where: { id: drawId }, include: { winner: true } });
+  if (!draw) throw new DrawError("DRAW_NOT_FOUND");
+  if (draw.status !== "PENDING_BEACON" || draw.beaconRound === null) throw new DrawError("DRAW_NOT_PENDING");
+  return awaitBeaconAndCommit(
+    database,
+    {
+      status: "PENDING_BEACON",
+      drawId: draw.id,
+      preparationId: draw.preparationId,
+      prizeId: draw.prizeId,
+      slotNumber: draw.slotNumber,
+      sequence: draw.sequence,
+      targetRound: draw.beaconRound,
+      replayed: true,
+    },
+    options,
+  );
 }

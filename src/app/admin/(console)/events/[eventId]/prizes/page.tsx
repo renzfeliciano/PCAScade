@@ -13,7 +13,7 @@ import { movePrizeAction } from "./actions";
 export const metadata: Metadata = { title: "Prizes" };
 
 const PROBLEMS: Record<string, string> = {
-  locked: "The prize list is frozen for an active raffle. Cancel the raffle preparation to change the draw order.",
+  locked: "The prize list is frozen for an active raffle. Cancel the raffle, or use Fresh Start, to change the draw order.",
   missing: "That prize no longer exists.",
 };
 

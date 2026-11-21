@@ -3,6 +3,7 @@ import type { Db } from "@/lib/db";
 import { appendAudit } from "@/modules/audit/server/audit-log";
 import { type CachePurger, mediaCacheTag, storeImage } from "@/modules/media/server/photo-store";
 import { MAX_PRIZES_PER_EVENT, normalizePrizeValues } from "@/modules/prizes/domain/prizes";
+import { parseEligibilityRule } from "@/modules/raffle/domain/snapshot";
 import { assertRosterEditable } from "@/modules/raffle/server/roster-lock";
 
 export type PrizeErrorCode = "NOT_FOUND" | "DUPLICATE_CODE" | "INVALID" | "HAS_DRAWS" | "TOO_MANY";
@@ -129,6 +130,27 @@ export async function setPrizeStatus(database: Db, eventId: string, prizeId: str
     if (existing.status === status) return;
     await tx.prize.update({ where: { id: prizeId }, data: { status } });
     await appendAudit(tx, { eventId, actor: "admin", action: "prize.status_changed", entityType: "prize", entityId: prizeId, payload: { code: existing.code, from: existing.status, to: status } });
+  });
+}
+
+export async function setPrizeEligibility(database: Db, eventId: string, prizeId: string, departments: readonly string[]) {
+  const rule = parseEligibilityRule({ departments: departments.map((department) => department.trim()).filter(Boolean) });
+  return database.$transaction(async (tx) => {
+    await assertRosterEditable(tx, eventId);
+    const existing = await tx.prize.findFirst({ where: { id: prizeId, eventId }, select: { code: true, eligibilityRule: true } });
+    if (!existing) throw new PrizeError("NOT_FOUND");
+    const before = parseEligibilityRule(existing.eligibilityRule);
+    if (JSON.stringify(before) === JSON.stringify(rule)) return rule;
+    await tx.prize.update({ where: { id: prizeId }, data: { eligibilityRule: rule } });
+    await appendAudit(tx, {
+      eventId,
+      actor: "admin",
+      action: "prize.eligibility_changed",
+      entityType: "prize",
+      entityId: prizeId,
+      payload: { code: existing.code, from: before.departments, to: rule.departments },
+    });
+    return rule;
   });
 }
 

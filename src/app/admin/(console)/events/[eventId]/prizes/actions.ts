@@ -9,7 +9,7 @@ import { purgeCdnCache } from "@/modules/media/server/cdn-cache";
 import { MediaError } from "@/modules/media/server/photo-store";
 import { categoryInputSchema } from "@/modules/prizes/domain/prizes";
 import { CategoryError, createCategory, deleteCategory, moveCategory, updateCategory } from "@/modules/prizes/server/categories";
-import { PrizeError, createPrize, deletePrize, movePrize, replacePrizePhoto, setPrizeStatus, updatePrize } from "@/modules/prizes/server/prizes";
+import { PrizeError, createPrize, deletePrize, movePrize, replacePrizePhoto, setPrizeEligibility, setPrizeStatus, updatePrize } from "@/modules/prizes/server/prizes";
 import { RosterLockedError } from "@/modules/raffle/server/roster-lock";
 
 export type PrizeFormState = { fieldErrors?: Record<string, string>; formError?: string; saved?: boolean; values?: Record<string, string> };
@@ -118,6 +118,19 @@ export async function uploadPrizePhotoAction(eventId: string, prizeId: string, _
   revalidatePrizes(eventId);
   revalidatePath(`/admin/events/${eventId}/prizes/${prizeId}`);
   return { message: remove ? "Photo removed." : "Photo saved." };
+}
+
+export async function setPrizeEligibilityAction(eventId: string, prizeId: string, _previous: PrizeSimpleState, formData: FormData): Promise<PrizeSimpleState> {
+  await requireAdmin();
+  if (!validIds(eventId, prizeId)) return { error: "This prize no longer exists." };
+  const departments = formData.getAll("departments").map((value) => String(value).slice(0, 120)).slice(0, 200);
+  try {
+    const rule = await setPrizeEligibility(db(), eventId, prizeId, departments);
+    revalidatePath(`/admin/events/${eventId}/prizes/${prizeId}`);
+    return { message: rule.departments.length === 0 ? "Everyone can win this prize." : `Only ${rule.departments.join(", ")} can win this prize.` };
+  } catch (error) {
+    return { error: prizeFailure(error).formError };
+  }
 }
 
 export async function movePrizeAction(eventId: string, prizeId: string, direction: "up" | "down"): Promise<void> {

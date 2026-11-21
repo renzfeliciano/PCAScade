@@ -1,18 +1,10 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { concatBytes, utf8ToBytes } from "@noble/hashes/utils.js";
-import { sortCandidates } from "@/modules/raffle/domain/select";
-
-const ROSTER_TAG = utf8ToBytes("PCASCADE/roster/v1");
 
 function field(bytes: Uint8Array): Uint8Array {
   const length = new Uint8Array(4);
   new DataView(length.buffer).setUint32(0, bytes.length);
   return concatBytes(length, bytes);
-}
-
-export function rosterDigest(eligibleParticipantIds: readonly string[]): Uint8Array {
-  const sorted = sortCandidates(eligibleParticipantIds);
-  return sha256(concatBytes(field(ROSTER_TAG), ...sorted.map((id) => field(utf8ToBytes(id)))));
 }
 
 export function seedCommitment(serverSeed: Uint8Array): Uint8Array {

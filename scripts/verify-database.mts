@@ -3,8 +3,11 @@ import { config } from "dotenv";
 import { createDb, type Db } from "@/lib/db";
 import { parseServerEnv } from "@/lib/env";
 import { fetchRound } from "@/modules/beacon/drand";
-import { rosterDigest, seedCommitment } from "@/modules/raffle/domain/roster";
+import { seedCommitment } from "@/modules/raffle/domain/roster";
+import { SELECT_ALGORITHM_VERSION } from "@/modules/raffle/domain/select";
+import { manifest, raffleRulesSchema } from "@/modules/raffle/domain/snapshot";
 import { DrawError, requestDraw } from "@/modules/raffle/server/draw";
+import { liveSnapshots } from "@/modules/raffle/server/live-snapshot";
 import { runDraw } from "@/modules/raffle/server/run-draw";
 
 config({ path: ".env.local", quiet: true });
@@ -20,20 +23,42 @@ async function createScratchRaffle(database: Db, tag: string, participants: numb
       fullName: `Verification participant ${index + 1}`,
     })),
   });
-  const roster = await database.participant.findMany({ where: { eventId: event.id }, select: { id: true } });
   const prize = await database.prize.create({ data: { eventId: event.id, code: `VERIFY-${tag}`, name: "Verification prize", quantity, drawOrder: 1 } });
   const serverSeed = new Uint8Array(randomBytes(32));
+  const commitment = seedCommitment(serverSeed);
+  const rules = raffleRulesSchema.parse({});
+  const live = await liveSnapshots(database, event.id, rules);
+  const id = randomUUID();
+  const sealed = manifest({
+    preparationId: id,
+    eventId: event.id,
+    version: 1,
+    participantsSha256: live.participants.sha256,
+    prizesSha256: live.prizes.sha256,
+    rulesSha256: live.rules.sha256,
+    seedCommitment: commitment,
+    participantCount: live.participantCount,
+    prizeCount: live.prizeCount,
+    slotCount: live.slotCount,
+  });
   const preparation = await database.rafflePreparation.create({
     data: {
+      id,
       eventId: event.id,
       version: 1,
       status: "FROZEN",
-      rules: { repeatWinners: "never" },
-      participantsSha256: new Uint8Array(rosterDigest(roster.map((row) => row.id))),
-      prizesSha256: new Uint8Array(randomBytes(32)),
-      rulesSha256: new Uint8Array(randomBytes(32)),
-      seedCommitment: new Uint8Array(seedCommitment(serverSeed)),
-      algorithmVersion: "pcascade-select-v1",
+      rules,
+      participantsJson: live.participants.text,
+      prizesJson: live.prizes.text,
+      rulesJson: live.rules.text,
+      participantsSha256: new Uint8Array(live.participants.sha256),
+      prizesSha256: new Uint8Array(live.prizes.sha256),
+      rulesSha256: new Uint8Array(live.rules.sha256),
+      manifestSha256: new Uint8Array(sealed.sha256),
+      participantCount: live.participantCount,
+      slotCount: live.slotCount,
+      seedCommitment: new Uint8Array(commitment),
+      algorithmVersion: SELECT_ALGORITHM_VERSION,
       frozenAt: new Date(),
     },
   });
@@ -41,12 +66,16 @@ async function createScratchRaffle(database: Db, tag: string, participants: numb
 }
 
 async function removeScratchEvent(database: Db, eventId: string) {
-  await database.winner.deleteMany({ where: { preparation: { eventId } } });
-  await database.draw.deleteMany({ where: { preparation: { eventId } } });
-  await database.rafflePreparation.deleteMany({ where: { eventId } });
-  await database.prize.deleteMany({ where: { eventId } });
-  await database.participant.deleteMany({ where: { eventId } });
-  await database.event.delete({ where: { id: eventId } });
+  await database.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('pcascade.allow_purge', 'on', true)`;
+    await tx.winnerCorrection.deleteMany({ where: { preparation: { eventId } } });
+    await tx.winner.deleteMany({ where: { preparation: { eventId } } });
+    await tx.draw.deleteMany({ where: { preparation: { eventId } } });
+    await tx.rafflePreparation.deleteMany({ where: { eventId } });
+    await tx.prize.deleteMany({ where: { eventId } });
+    await tx.participant.deleteMany({ where: { eventId } });
+    await tx.event.delete({ where: { id: eventId } });
+  });
 }
 
 async function main() {

@@ -3,7 +3,7 @@ import type { Prisma } from "@/generated/prisma/client";
 export class RosterLockedError extends Error {
   readonly code = "ROSTER_LOCKED";
   constructor() {
-    super("The participant roster and prize list are frozen for an active raffle. Cancel the raffle preparation to make changes.");
+    super("The participant roster and prize list are frozen for an active raffle. Cancel the raffle, or use Fresh Start once drawing has begun, to make changes.");
   }
 }
 

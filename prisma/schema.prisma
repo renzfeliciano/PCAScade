@@ -331,25 +331,64 @@ model Prize {
   @@map("prize")
 }
 
+enum CorrectionReason {
+  WINNER_ABSENT
+  INELIGIBLE
+  DATA_ERROR
+  TECHNICAL_ISSUE
+  OTHER
+}
+
 model RafflePreparation {
-  id                 String            @id @default(uuid(7)) @db.Uuid
-  eventId            String            @map("event_id") @db.Uuid
+  id                 String             @id @default(uuid(7)) @db.Uuid
+  eventId            String             @map("event_id") @db.Uuid
   version            Int
-  status             PreparationStatus @default(DRAFT)
-  rules              Json              @default("{}")
-  participantsSha256 Bytes?            @map("participants_sha256")
-  prizesSha256       Bytes?            @map("prizes_sha256")
-  rulesSha256        Bytes?            @map("rules_sha256")
-  seedCommitment     Bytes?            @map("seed_commitment")
-  algorithmVersion   String            @map("algorithm_version")
-  frozenAt           DateTime?         @map("frozen_at") @db.Timestamptz(3)
-  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  event              Event             @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  status             PreparationStatus  @default(DRAFT)
+  rules              Json               @default("{}")
+  participantsJson   String?            @map("participants_json")
+  prizesJson         String?            @map("prizes_json")
+  rulesJson          String?            @map("rules_json")
+  participantsSha256 Bytes?             @map("participants_sha256")
+  prizesSha256       Bytes?             @map("prizes_sha256")
+  rulesSha256        Bytes?             @map("rules_sha256")
+  manifestSha256     Bytes?             @map("manifest_sha256")
+  seedCommitment     Bytes?             @map("seed_commitment")
+  seedCiphertext     Bytes?             @map("seed_ciphertext")
+  revealedSeed       Bytes?             @map("revealed_seed")
+  participantCount   Int?               @map("participant_count")
+  slotCount          Int?               @map("slot_count")
+  algorithmVersion   String             @map("algorithm_version")
+  statusReason       String?            @map("status_reason")
+  frozenAt           DateTime?          @map("frozen_at") @db.Timestamptz(3)
+  closedAt           DateTime?          @map("closed_at") @db.Timestamptz(3)
+  supersededById     String?            @unique @map("superseded_by_id") @db.Uuid
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  event              Event              @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  supersededBy       RafflePreparation? @relation("Supersedes", fields: [supersededById], references: [id], onDelete: Restrict)
+  supersedes         RafflePreparation? @relation("Supersedes")
   draws              Draw[]
   winners            Winner[]
+  corrections        WinnerCorrection[]
 
   @@unique([eventId, version])
   @@map("raffle_preparation")
+}
+
+model WinnerCorrection {
+  id             String            @id @default(uuid(7)) @db.Uuid
+  preparationId  String            @map("preparation_id") @db.Uuid
+  drawId         String            @unique @map("draw_id") @db.Uuid
+  winnerId       String?           @unique @map("winner_id") @db.Uuid
+  afterSequence  Int               @map("after_sequence")
+  reasonCategory CorrectionReason  @map("reason_category")
+  reasonText     String            @map("reason_text")
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  preparation    RafflePreparation @relation(fields: [preparationId], references: [id], onDelete: Restrict)
+  draw           Draw              @relation(fields: [drawId], references: [id], onDelete: Restrict)
+  winner         Winner?           @relation(fields: [winnerId], references: [id], onDelete: Restrict)
+
+  @@index([preparationId])
+  @@map("winner_correction")
 }
 
 model Draw {
@@ -370,6 +409,7 @@ model Draw {
   preparation         RafflePreparation @relation(fields: [preparationId], references: [id], onDelete: Restrict)
   prize               Prize             @relation(fields: [prizeId], references: [id], onDelete: Restrict)
   winner              Winner?
+  correction          WinnerCorrection?
 
   @@unique([preparationId, sequence])
   @@index([preparationId, prizeId])
@@ -387,6 +427,7 @@ model Winner {
   draw           Draw              @relation(fields: [drawId], references: [id], onDelete: Restrict)
   preparation    RafflePreparation @relation(fields: [preparationId], references: [id], onDelete: Restrict)
   participant    Participant       @relation(fields: [participantId], references: [id], onDelete: Restrict)
+  correction     WinnerCorrection?
 
   @@index([preparationId])
   @@map("winner")

@@ -10,6 +10,7 @@ const TABS = [
   { suffix: "/fields", label: "Custom fields" },
   { suffix: "/prizes", label: "Prizes" },
   { suffix: "/imports", label: "Imports" },
+  { suffix: "/raffle", label: "Raffle" },
 ];
 
 export function EventTabs({ eventId, eventName }: { eventId: string; eventName: string }) {
