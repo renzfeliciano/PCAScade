@@ -45,10 +45,12 @@ Times are seconds from the start of the scene (after the countdown). Durations m
 
 | Time | Picture | Camera |
 |---|---|---|
-| 0.0–2.2 | A yellow tower crane against the open sky of the site HDRI; trolley travelling along the jib. | Low angle up the mast, slow orbit. |
-| 2.2–5.0 | The hook lifts a covered steel load from the ground; the cables sway and settle. | Tilt follows the load upward. |
-| 5.0–7.0 | The load turns to face the camera; its cover panels release and drop away. | Camera rises to the load's height. |
-| 7.0–9.0 | Floodlights hit the load; the winner overlay appears in front of it. | Holds, slight drift. |
+| 0.0–2.2 | A yellow lattice tower crane against a dusk sky; the trolley travels along the jib while the hook lowers to the load. | Low angle up the mast, slow drift. |
+| 2.2–5.0 | The hook lifts a covered steel load off the ground in a puff of dust; it swings and settles. | Tilt follows the load upward. |
+| 5.0–7.0 | The load turns to face the camera; light leaks through the panel seams, then the cover panels release and drop away, revealing a steel cage glowing in the event accent. | Camera rises to the load's height. |
+| 7.0–9.0 | Floodlights flick on below with faint beams; the winner overlay appears in front of the load. | Holds, slight drift. |
+
+The sky is a gradient dome painted in code rather than the HDRI shown as a backdrop: the HDRI is a ground-level photo of apartment blocks, which looked wrong from 20 m up. The HDRI still provides the reflections.
 
 ### 4. The Grand Finale (grand prize, 11 s)
 
