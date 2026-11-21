@@ -34,8 +34,9 @@ const MESSAGES: Record<string, string> = {
   ROW_NOT_FOUND: "That row is not part of this import.",
   ROW_NOT_IMPORTABLE: "That row will not be imported, so its photo was not attached.",
   INVALID_ROWS_PRESENT: "Some rows have errors. Fix the file, or confirm that those rows should be skipped.",
-  STALE_PREVIEW: "Participants changed since this preview was checked. Run the check again before committing.",
+  STALE_PREVIEW: "Records changed since this preview was checked. Run the check again before committing.",
   REVERT_CONFLICT: "Some records changed after the import, so it cannot be reverted automatically.",
+  TOO_MANY_PRIZES: "This import would take the event past 500 prizes.",
 };
 
 function failure(error: unknown): { ok: false; message: string; code?: string; details?: string[] } {
@@ -52,6 +53,7 @@ async function belongs(eventId: string, batchId: string) {
 }
 
 const startSchema = z.object({
+  kind: z.enum(["PARTICIPANTS", "PRIZES"]),
   fileName: z.string().min(1).max(260),
   fileSha256: z.string().regex(/^[0-9a-f]{64}$/),
   sheetName: z.string().max(100).nullable(),
@@ -124,6 +126,7 @@ export async function commitImportAction(eventId: string, batchId: string, _prev
     return { error: result.message, details: result.details };
   }
   revalidatePath(`/admin/events/${eventId}/participants`);
+  revalidatePath(`/admin/events/${eventId}/prizes`);
   revalidatePath(`/admin/events/${eventId}/imports`);
   redirect(`/admin/events/${eventId}/imports/${batchId}`);
 }
@@ -138,7 +141,7 @@ export async function recheckImportAction(eventId: string, batchId: string, _pre
     return { error: result.message, details: result.details };
   }
   revalidatePath(`/admin/events/${eventId}/imports/${batchId}`);
-  return { message: "Checked again against the current participant list." };
+  return { message: "Checked again against the current records." };
 }
 
 export async function cancelImportAction(eventId: string, batchId: string, _previous: BatchActionState): Promise<BatchActionState> {
@@ -164,6 +167,7 @@ export async function revertImportAction(eventId: string, batchId: string, _prev
     return { error: result.message, details: result.details };
   }
   revalidatePath(`/admin/events/${eventId}/participants`);
+  revalidatePath(`/admin/events/${eventId}/prizes`);
   revalidatePath(`/admin/events/${eventId}/imports/${batchId}`);
   return { message: "Import reverted." };
 }

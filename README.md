@@ -35,7 +35,7 @@ Sign in at `/admin/login`.
 | `npm run admin:bootstrap` | Create the single administrator (`-- --reset` to replace a lost password) |
 | `npm run db:verify` | Check concurrent draws and the drand beacon against the database in `.env.local` |
 | `npm run smoke:http` | HTTP checks against a running build (`SMOKE_BASE_URL`, `SMOKE_ADMIN_PASSWORD`) |
-| `npx tsx tests/e2e/make-import-fixtures.mts <dir>` | Write a messy sample `.xlsx` and photo `.zip` for trying the import wizard |
+| `npx tsx tests/e2e/make-import-fixtures.mts <dir>` | Write messy sample participant and prize sheets with photo ZIPs for trying the import wizard |
 
 ## Docs
 
@@ -44,3 +44,4 @@ Sign in at `/admin/login`.
 - [Phase 0 report](docs/phases/phase-0-report.md)
 - [Phase 1 report](docs/phases/phase-1-report.md)
 - [Phase 2A report](docs/phases/phase-2a-report.md)
+- [Phase 2B report](docs/phases/phase-2b-report.md)

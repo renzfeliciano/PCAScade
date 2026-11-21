@@ -30,9 +30,10 @@ function Outcome({ state }: { state: BatchActionState }) {
   return null;
 }
 
-type Props = { eventId: string; batchId: string; status: string; createCount: number; updateCount: number; invalidCount: number };
+type Props = { eventId: string; batchId: string; noun: "participants" | "prizes"; status: string; createCount: number; updateCount: number; invalidCount: number };
 
-export function BatchActions({ eventId, batchId, status, createCount, updateCount, invalidCount }: Props) {
+export function BatchActions({ eventId, batchId, noun, status, createCount, updateCount, invalidCount }: Props) {
+  const singular = noun === "prizes" ? "prize" : "participant";
   const [commitState, commit, committing] = useActionState(commitImportAction.bind(null, eventId, batchId), {});
   const [recheckState, recheck, rechecking] = useActionState(recheckImportAction.bind(null, eventId, batchId), {});
   const [cancelState, cancel, cancelling] = useActionState(cancelImportAction.bind(null, eventId, batchId), {});
@@ -48,8 +49,8 @@ export function BatchActions({ eventId, batchId, status, createCount, updateCoun
         <Outcome state={cancelState} />
         <form action={commit} className="grid gap-3 rounded-md border border-border bg-card p-4">
           <p className="text-sm">
-            Importing adds <span className="font-semibold">{createCount}</span> new participants and updates <span className="font-semibold">{updateCount}</span>, in one
-            step. If anything fails, nothing is saved.
+            Importing adds <span className="font-semibold">{createCount}</span> new {createCount === 1 ? singular : noun} and updates{" "}
+            <span className="font-semibold">{updateCount}</span>, in one step. If anything fails, nothing is saved.
           </p>
           {invalidCount > 0 ? (
             <label className="flex items-start gap-2 text-sm">
@@ -61,7 +62,7 @@ export function BatchActions({ eventId, batchId, status, createCount, updateCoun
           ) : null}
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={committing || nothing}>
-              {committing ? "Importing…" : "Import participants"}
+              {committing ? "Importing…" : `Import ${noun}`}
             </Button>
             <Button type="submit" formAction={recheck} variant="outline" disabled={rechecking}>
               {rechecking ? "Checking…" : "Check again"}
@@ -82,8 +83,8 @@ export function BatchActions({ eventId, batchId, status, createCount, updateCoun
         {confirmRevert ? (
           <form action={revert} className="grid gap-3 rounded-md border border-destructive/40 bg-destructive/5 p-4">
             <p className="text-sm">
-              <span className="font-semibold">Revert this import?</span> Participants it added are removed and participants it updated get their previous values back.
-              This stops if any of them changed since, has won a prize, or if the raffle is frozen.
+              <span className="font-semibold">Revert this import?</span> {noun === "prizes" ? "Prizes" : "Participants"} it added are removed and {noun} it updated get
+              their previous values back. This stops if any of them changed since, {noun === "prizes" ? "has been drawn" : "has won a prize"}, or if the raffle is frozen.
             </p>
             <div className="flex gap-2">
               <Button type="submit" variant="destructive" size="sm" disabled={reverting}>

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { mappingProblems, participantTargets, suggestMapping } from "@/modules/imports/domain/mapping";
+import { mappingProblems, participantTargets, prizeTargets, suggestMapping, suggestPrizeMapping } from "@/modules/imports/domain/mapping";
 import { inspectZipEntryName, matchPhotos } from "@/modules/imports/domain/photos";
+import { normalizePrizeRow, planPrizeRows } from "@/modules/imports/domain/prize-rows";
+import { categoryInputSchema, resolveCategory } from "@/modules/prizes/domain/prizes";
 import { csvCell, issuesReportCsv } from "@/modules/imports/domain/report";
 import { normalizeRow, planRows } from "@/modules/imports/domain/rows";
 import { type CustomFieldDefinition, fieldDefinitionSchema, normalizeCustomValue } from "@/modules/participants/domain/fields";
@@ -147,8 +149,63 @@ describe("error report", () => {
     expect(csvCell("=HYPERLINK(\"http://x\")")).toBe("\"'=HYPERLINK(\"\"http://x\"\")\"");
     expect(csvCell("+639171234567")).toBe("'+639171234567");
     expect(csvCell("plain")).toBe("plain");
-    const csv = issuesReportCsv([{ rowNumber: 7, action: "INVALID", externalId: "@SUM(A1)", errors: [{ field: "email", code: "X", message: "Bad, really" }], warnings: [] }]);
+    const csv = issuesReportCsv([{ rowNumber: 7, action: "INVALID", key: "@SUM(A1)", errors: [{ field: "email", code: "X", message: "Bad, really" }], warnings: [] }]);
     expect(csv.startsWith("\uFEFFrow,employee_id")).toBe(true);
     expect(csv).toContain("7,'@SUM(A1),INVALID,error,email,\"Bad, really\"");
+    expect(issuesReportCsv([], "prize_code").startsWith("\uFEFFrow,prize_code,")).toBe(true);
+  });
+});
+
+describe("prize rows", () => {
+  const categories = [
+    { id: "c-minor", name: "Minor Prizes", slug: "minor-prizes" },
+    { id: "c-grand", name: "Grand", slug: "grand" },
+  ];
+
+  it("suggests prize columns without confusing them with participant columns", () => {
+    expect(suggestPrizeMapping(["Prize Code", "Prize Name", "No. of Winners", "Tier", "Image", "Employee ID"])).toEqual(["code", "name", "quantity", "category", "photoFilename", null]);
+    expect(mappingProblems(["name", null], prizeTargets())).toEqual(["Map a column to Prize code; it is required."]);
+  });
+
+  it("normalises values and resolves categories by name or slug, case-insensitively", () => {
+    const mapping = ["code", "name", "quantity", "category", "description"];
+    const row = normalizePrizeRow({ rowNumber: 2, cells: [" TV-01 ", "Smart   TV", "1,000", "minor PRIZES", "Line one\r\nLine two"] }, mapping, categories);
+    expect(row.errors).toEqual([]);
+    expect(row.draft).toEqual({ code: "TV-01", name: "Smart TV", quantity: 1000, categoryId: "c-minor", description: "Line one\nLine two", mapped: ["code", "name", "quantity", "category", "description"] });
+    expect(normalizePrizeRow({ rowNumber: 3, cells: ["A", "B", null, "grand", null] }, mapping, categories).draft).toMatchObject({ quantity: 1, categoryId: "c-grand" });
+  });
+
+  it("rejects bad codes, quantities and unknown categories with the list of valid ones", () => {
+    const mapping = ["code", "name", "quantity", "category"];
+    const fields = (cells: (string | number | null)[]) => normalizePrizeRow({ rowNumber: 2, cells }, mapping, categories).errors.map((issue) => issue.field);
+    expect(fields(["=cmd|' /C calc'!A0", "x", 1, null])).toEqual(["code"]);
+    expect(fields(["OK", "x", 0, null])).toEqual(["quantity"]);
+    expect(fields(["OK", "x", 1001, null])).toEqual(["quantity"]);
+    expect(fields(["OK", "x", "two", null])).toEqual(["quantity"]);
+    expect(fields(["OK", "", 1, null])).toEqual(["name"]);
+    const unknown = normalizePrizeRow({ rowNumber: 2, cells: ["OK", "x", 1, "Platinum"] }, mapping, categories).errors[0];
+    expect(unknown).toMatchObject({ field: "category", code: "UNKNOWN_CATEGORY" });
+    expect(unknown?.message).toContain("Minor Prizes, Grand");
+    expect(resolveCategory("Anything", [])).toMatchObject({ ok: false, message: expect.stringContaining("Create the prize categories first") });
+  });
+
+  it("plans prize rows by code, case-insensitively", () => {
+    const mapping = ["code", "name"];
+    const rows = [["dup", "One"], ["DUP", "Two"], ["tv", "Three"], ["NEW", "Four"]].map((cells, index) => normalizePrizeRow({ rowNumber: index + 2, cells }, mapping, categories));
+    const existing = [{ id: "p-tv", code: "TV", name: "Television" }];
+    expect(planPrizeRows(rows, existing, "UPDATE").map((row) => [row.action, row.prizeId])).toEqual([
+      ["INVALID", null],
+      ["INVALID", null],
+      ["UPDATE", "p-tv"],
+      ["CREATE", null],
+    ]);
+    expect(planPrizeRows(rows, existing, "SKIP")[2]).toMatchObject({ action: "SKIP", prizeId: "p-tv" });
+    expect(planPrizeRows(rows, existing, "REJECT")[2]).toMatchObject({ action: "INVALID", prizeId: null });
+  });
+
+  it("validates category input against the four scenes", () => {
+    expect(categoryInputSchema.safeParse({ name: "Grand", description: "", sceneKey: "grand-finale" }).data).toEqual({ name: "Grand", description: null, sceneKey: "grand-finale" });
+    expect(categoryInputSchema.safeParse({ name: "Grand", description: "", sceneKey: "fireworks" }).success).toBe(false);
+    expect(categoryInputSchema.safeParse({ name: "   ", description: "", sceneKey: "big-lift" }).success).toBe(false);
   });
 });

@@ -15,7 +15,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const FILTERS = { all: "All rows", problems: "Errors and warnings", invalid: "Errors only" } as const;
 const ACTION_LABELS: Record<string, string> = { CREATE: "New", UPDATE: "Update", SKIP: "Skip", INVALID: "Error" };
 
-type Draft = { externalId?: string; fullName?: string; department?: string | null };
+type Draft = { externalId?: string; fullName?: string; code?: string; name?: string };
 
 export default async function ImportBatchPage({ params, searchParams }: PageProps<"/admin/events/[eventId]/imports/[batchId]">) {
   await requireAdmin();
@@ -30,6 +30,7 @@ export default async function ImportBatchPage({ params, searchParams }: PageProp
   const rows = await listImportRows(database, batchId, { filter, page });
   const pages = Math.max(1, Math.ceil(rows.total / rows.pageSize));
   const base = `/admin/events/${eventId}/imports/${batchId}`;
+  const prizes = batch.kind === "PRIZES";
   const summary = [
     ["Rows", batch.rowCount],
     ["New", batch.createCount],
@@ -47,6 +48,7 @@ export default async function ImportBatchPage({ params, searchParams }: PageProp
         </Link>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold">{batch.fileName}</h1>
+          <Badge variant="outline">{prizes ? "Prizes" : "Participants"}</Badge>
           <Badge variant={batch.status === "COMMITTED" ? "default" : "secondary"}>{IMPORT_STATUS_LABELS[batch.status] ?? batch.status}</Badge>
         </div>
         <p className="font-mono text-xs break-all text-muted-foreground">SHA-256 {batch.fileSha256Hex}</p>
@@ -65,6 +67,7 @@ export default async function ImportBatchPage({ params, searchParams }: PageProp
         key={batch.status}
         eventId={eventId}
         batchId={batchId}
+        noun={prizes ? "prizes" : "participants"}
         status={batch.status}
         createCount={batch.createCount}
         updateCount={batch.updateCount}
@@ -102,7 +105,7 @@ export default async function ImportBatchPage({ params, searchParams }: PageProp
                 <TableRow>
                   <TableHead>Row</TableHead>
                   <TableHead>Photo</TableHead>
-                  <TableHead>Participant</TableHead>
+                  <TableHead>{prizes ? "Prize" : "Participant"}</TableHead>
                   <TableHead>Outcome</TableHead>
                   <TableHead>Problems</TableHead>
                 </TableRow>
@@ -121,8 +124,8 @@ export default async function ImportBatchPage({ params, searchParams }: PageProp
                         )}
                       </TableCell>
                       <TableCell className="text-sm">
-                        <span className="block font-medium">{draft.fullName || "—"}</span>
-                        <span className="block font-mono text-xs text-muted-foreground">{draft.externalId || "no employee ID"}</span>
+                        <span className="block font-medium">{(prizes ? draft.name : draft.fullName) || "—"}</span>
+                        <span className="block font-mono text-xs text-muted-foreground">{(prizes ? draft.code : draft.externalId) || (prizes ? "no prize code" : "no employee ID")}</span>
                       </TableCell>
                       <TableCell>
                         <Badge variant={row.action === "INVALID" ? "destructive" : row.action === "SKIP" ? "outline" : "secondary"}>{ACTION_LABELS[row.action ?? ""] ?? "Pending"}</Badge>

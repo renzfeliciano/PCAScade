@@ -63,4 +63,26 @@ const zip = zipSync({
   "EMP-009.heic": new Uint8Array([0, 0, 0, 24]),
 });
 writeFileSync(join(outDir, "participant-photos.zip"), zip);
-console.log(`wrote participants.xlsx and participant-photos.zip to ${outDir}`);
+
+const prizeHeaders = ["Prize Code", "Prize Name", "No. of Winners", "Tier", "Description", "Image"];
+const prizeRows = [
+  ["GC-500", "PHP 500 gift card", 20, "Minor", "Redeemable at partner stores", "GC-500.png"],
+  ["SPK-01", "Bluetooth speaker", 5, "minor", "", "SPK-01.png"],
+  ["TV-55", "55-inch smart TV", "2", "Major", "", "TV-55.png"],
+  ["CAR", "Brand-new car", 1, "grand prize", "The grand prize", "car.png"],
+  ["VIP", "Unknown tier prize", 1, "Platinum", "", ""],
+  ["ZERO", "No winners", 0, "Minor", "", ""],
+  ["gc-500", "Duplicate code", 1, "Minor", "", ""],
+];
+await writeXlsxFile([prizeHeaders.map((value) => ({ value })), ...prizeRows.map((row) => row.map((value) => ({ value })))], {}).toFile(join(outDir, "prizes.xlsx"));
+writeFileSync(
+  join(outDir, "prize-photos.zip"),
+  zipSync({
+    "GC-500.png": portrait(900, [242, 169, 0]),
+    "SPK-01.png": portrait(600, [47, 109, 181]),
+    "TV-55.png": portrait(1600, [31, 118, 118]),
+    "car.png": portrait(2000, [184, 58, 46]),
+    "../escape.png": portrait(64, [0, 0, 0]),
+  }),
+);
+console.log(`wrote participants.xlsx, participant-photos.zip, prizes.xlsx and prize-photos.zip to ${outDir}`);

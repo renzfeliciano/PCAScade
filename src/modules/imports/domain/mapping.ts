@@ -1,8 +1,10 @@
 import { z } from "zod";
 import type { CustomFieldDefinition } from "@/modules/participants/domain/fields";
 import { BUILTIN_PARTICIPANT_FIELDS } from "@/modules/participants/domain/fields";
+import { PRIZE_IMPORT_FIELDS } from "@/modules/prizes/domain/prizes";
 
 export type ImportTarget = string;
+export type ImportKind = "PARTICIPANTS" | "PRIZES";
 
 export const PHOTO_TARGET = "photoFilename";
 
@@ -16,6 +18,21 @@ export function participantTargets(definitions: readonly CustomFieldDefinition[]
   ];
 }
 
+export function prizeTargets(): TargetOption[] {
+  return [...PRIZE_IMPORT_FIELDS.map((field) => ({ target: field.key, label: field.label, required: field.required })), { target: PHOTO_TARGET, label: "Photo file name", required: false }];
+}
+
+const PHOTO_SYNONYMS = ["photo filename", "photo file name", "photo", "photo file", "picture", "image", "image filename"];
+
+const PRIZE_SYNONYMS: Record<string, string[]> = {
+  code: ["prize code", "code", "prize id", "item code", "prize no", "prize number", "sku"],
+  name: ["prize name", "prize", "name", "item", "item name", "title"],
+  description: ["description", "details", "prize description", "notes"],
+  quantity: ["winners", "number of winners", "no of winners", "quantity", "qty", "slots", "count", "units"],
+  category: ["category", "prize category", "tier", "group", "class"],
+  photoFilename: PHOTO_SYNONYMS,
+};
+
 const SYNONYMS: Record<string, string[]> = {
   externalId: ["employee id", "employee no", "employee number", "emp id", "emp no", "employee code", "id number", "id no", "staff id", "participant id", "id"],
   fullName: ["full name", "name", "employee name", "participant name", "complete name"],
@@ -24,7 +41,7 @@ const SYNONYMS: Record<string, string[]> = {
   bio: ["description", "bio", "biography", "about", "profile"],
   email: ["email", "email address", "e mail", "work email"],
   eligible: ["eligible", "eligibility", "is eligible", "qualified"],
-  photoFilename: ["photo filename", "photo file name", "photo", "photo file", "picture", "image", "image filename"],
+  photoFilename: PHOTO_SYNONYMS,
 };
 
 export function normalizeHeader(header: string): string {
@@ -37,11 +54,19 @@ export function normalizeHeader(header: string): string {
 }
 
 export function suggestMapping(headers: readonly string[], definitions: readonly CustomFieldDefinition[]): (ImportTarget | null)[] {
-  const used = new Set<ImportTarget>();
   const candidates: Record<string, string[]> = { ...SYNONYMS };
   for (const definition of definitions) {
     candidates[`custom:${definition.key}`] = [normalizeHeader(definition.key.replace(/_/g, " ")), normalizeHeader(definition.label)];
   }
+  return suggestFrom(headers, candidates);
+}
+
+export function suggestPrizeMapping(headers: readonly string[]): (ImportTarget | null)[] {
+  return suggestFrom(headers, PRIZE_SYNONYMS);
+}
+
+function suggestFrom(headers: readonly string[], candidates: Record<string, string[]>): (ImportTarget | null)[] {
+  const used = new Set<ImportTarget>();
   return headers.map((header) => {
     const normalized = normalizeHeader(header);
     if (!normalized) return null;

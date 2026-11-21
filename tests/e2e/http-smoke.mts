@@ -64,6 +64,10 @@ async function main() {
     `/admin/events/${draft.id}/participants`,
     `/admin/events/${draft.id}/fields`,
     `/admin/events/${draft.id}/imports/new`,
+    "/admin/prizes",
+    `/admin/events/${draft.id}/prizes`,
+    `/admin/events/${draft.id}/prizes/new`,
+    `/admin/events/${draft.id}/prizes/categories`,
   ]) {
     const response = await get(path);
     const location = response.headers.get("location") ?? "";
@@ -100,6 +104,11 @@ async function main() {
     `/admin/events/${draft.id}/fields`,
     `/admin/events/${draft.id}/imports`,
     `/admin/events/${draft.id}/imports/new`,
+    `/admin/events/${draft.id}/imports/new?kind=prizes`,
+    "/admin/prizes",
+    `/admin/events/${draft.id}/prizes`,
+    `/admin/events/${draft.id}/prizes/new`,
+    `/admin/events/${draft.id}/prizes/categories`,
   ]) {
     const response = await get(path, cookie);
     check(`signed-in ${path}`, response.status === 200, `HTTP ${response.status}`);

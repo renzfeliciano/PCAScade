@@ -6,14 +6,14 @@ export function csvCell(value: unknown): string {
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-export type ReportRow = { rowNumber: number; action: string | null; externalId: string | null; errors: RowIssue[]; warnings: RowIssue[] };
+export type ReportRow = { rowNumber: number; action: string | null; key: string | null; errors: RowIssue[]; warnings: RowIssue[] };
 
-export function issuesReportCsv(rows: readonly ReportRow[]): string {
-  const lines = [["row", "employee_id", "outcome", "severity", "field", "problem"].join(",")];
+export function issuesReportCsv(rows: readonly ReportRow[], keyHeader = "employee_id"): string {
+  const lines = [["row", keyHeader, "outcome", "severity", "field", "problem"].join(",")];
   for (const row of rows) {
     const issues = [...row.errors.map((issue) => ({ ...issue, severity: "error" })), ...row.warnings.map((issue) => ({ ...issue, severity: "warning" }))];
     for (const issue of issues) {
-      lines.push([row.rowNumber, row.externalId, row.action ?? "", issue.severity, issue.field, issue.message].map(csvCell).join(","));
+      lines.push([row.rowNumber, row.key, row.action ?? "", issue.severity, issue.field, issue.message].map(csvCell).join(","));
     }
   }
   return `﻿${lines.join("\r\n")}\r\n`;

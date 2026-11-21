@@ -24,9 +24,17 @@ export default async function ImportsPage({ params }: PageProps<"/admin/events/[
           <h1 className="text-2xl font-bold">Imports</h1>
           <p className="text-sm text-muted-foreground">Every import is kept here with its outcome. Unfinished imports are cancelled after 24 hours.</p>
         </div>
-        <Link href={`/admin/events/${eventId}/imports/new`} className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
-          New import
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/admin/events/${eventId}/imports/new?kind=prizes`}
+            className="inline-flex h-9 items-center rounded-md border border-border px-4 text-sm font-semibold hover:bg-secondary"
+          >
+            Import prizes
+          </Link>
+          <Link href={`/admin/events/${eventId}/imports/new`} className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
+            Import participants
+          </Link>
+        </div>
       </div>
       {batches.length === 0 ? (
         <p className="rounded-md border border-dashed border-border p-8 text-center text-muted-foreground">No imports yet.</p>
@@ -36,6 +44,7 @@ export default async function ImportsPage({ params }: PageProps<"/admin/events/[
             <TableHeader>
               <TableRow>
                 <TableHead>Started</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>File</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Rows</TableHead>
@@ -53,6 +62,7 @@ export default async function ImportsPage({ params }: PageProps<"/admin/events/[
                       {timeFormat.format(batch.createdAt)}
                     </Link>
                   </TableCell>
+                  <TableCell className="text-sm">{batch.kind === "PRIZES" ? "Prizes" : "Participants"}</TableCell>
                   <TableCell className="max-w-56 truncate text-sm">{batch.fileName}</TableCell>
                   <TableCell>
                     <Badge variant={batch.status === "COMMITTED" ? "default" : "secondary"}>{IMPORT_STATUS_LABELS[batch.status] ?? batch.status}</Badge>

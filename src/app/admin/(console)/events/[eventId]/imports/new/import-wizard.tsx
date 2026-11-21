@@ -8,13 +8,37 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { describeImageProblem, ImagePreparationError, prepareWebpPhoto, sha256Hex } from "@/lib/client/images";
 import { type ParsedSheet, type ZipResult, parseSpreadsheet, readPhotoZip } from "@/lib/client/import-files";
-import { type ImportTarget, mappingProblems, participantTargets, suggestMapping } from "@/modules/imports/domain/mapping";
-import { type PhotoRule, matchPhotos, photoProblemMessage } from "@/modules/imports/domain/photos";
-import { normalizeRow } from "@/modules/imports/domain/rows";
+import { type ImportKind, type ImportTarget, mappingProblems, participantTargets, prizeTargets, suggestMapping, suggestPrizeMapping } from "@/modules/imports/domain/mapping";
+import { type PhotoRule, STORED_PHOTO_MAX_SIDE, matchPhotos, photoProblemMessage } from "@/modules/imports/domain/photos";
+import { normalizePrizeRow } from "@/modules/imports/domain/prize-rows";
+import { type RowIssue, normalizeRow } from "@/modules/imports/domain/rows";
 import { BUILTIN_PARTICIPANT_FIELDS, type CustomFieldDefinition, FIELD_TYPE_LABELS } from "@/modules/participants/domain/fields";
+import { type CategoryRef, MAX_PRIZE_QUANTITY, PRIZE_IMPORT_FIELDS, PRIZE_PHOTO_MAX_SIDE } from "@/modules/prizes/domain/prizes";
 import { appendRowsAction, startImportAction, uploadImportPhotoAction, validateBatchAction } from "../actions";
 
-type Props = { eventId: string; definitions: CustomFieldDefinition[] };
+type Props = { eventId: string; kind: ImportKind; definitions: CustomFieldDefinition[]; categories: CategoryRef[] };
+type CheckedRow = { rowNumber: number; photoRef: string | null; key: string; errors: RowIssue[] };
+
+const COPY = {
+  PARTICIPANTS: {
+    file: "Participant list (.xlsx or .csv)",
+    duplicate: "When an employee ID is already registered",
+    updateLabel: "Update the participant",
+    skipHint: "The existing participant is left unchanged.",
+    matchByKey: "Employee ID (photo named like EMP-001.jpg)",
+    requirePhoto: "Every participant must have a photo",
+    against: "registered participants",
+  },
+  PRIZES: {
+    file: "Prize list (.xlsx or .csv)",
+    duplicate: "When a prize code already exists",
+    updateLabel: "Update the prize",
+    skipHint: "The existing prize is left unchanged.",
+    matchByKey: "Prize code (photo named like TV-01.jpg)",
+    requirePhoto: "Every prize must have a photo",
+    against: "existing prizes",
+  },
+} as const;
 type Progress = { label: string; done: number; total: number };
 type PhotoFailure = { rowNumber: number; name: string; message: string };
 
@@ -39,8 +63,41 @@ function chunkRows(rows: ParsedSheet["rows"]) {
   return chunks;
 }
 
-async function downloadTemplate(definitions: CustomFieldDefinition[]) {
-  const columns = [
+function prizeTemplateColumns(categories: CategoryRef[]) {
+  const accepts: Record<string, string> = {
+    code: "Unique code: letters, digits, dots, dashes and underscores, for example TV-01",
+    name: "Text, up to 120 characters",
+    description: "Text, up to 1000 characters",
+    quantity: `Whole number from 1 to ${MAX_PRIZE_QUANTITY} (blank means 1)`,
+    category: categories.length ? `One of: ${categories.map((category) => category.name).join(", ")}` : "Create categories first, or leave blank",
+  };
+  return [
+    ...PRIZE_IMPORT_FIELDS.map((field) => ({ name: field.column, required: field.required, accepts: accepts[field.key] ?? "" })),
+    { name: "photo_filename", required: false, accepts: "File name of the photo inside the ZIP file, for example TV-01.jpg" },
+  ];
+}
+
+async function downloadTemplate(kind: ImportKind, definitions: CustomFieldDefinition[], categories: CategoryRef[]) {
+  const columns = kind === "PRIZES" ? prizeTemplateColumns(categories) : participantTemplateColumns(definitions);
+  const sheet = kind === "PRIZES" ? "Prizes" : "Participants";
+  await writeXlsxFile(
+    [
+      { sheet, data: [columns.map((column) => ({ value: column.name, fontWeight: "bold" as const }))], columns: columns.map(() => ({ width: 22 })), stickyRowsCount: 1 },
+      {
+        sheet: "Instructions",
+        data: [
+          [{ value: "Column", fontWeight: "bold" as const }, { value: "Required", fontWeight: "bold" as const }, { value: "Accepted values", fontWeight: "bold" as const }],
+          ...columns.map((column) => [{ value: column.name }, { value: column.required ? "Yes" : "No" }, { value: column.accepts }]),
+        ],
+        columns: [{ width: 22 }, { width: 10 }, { width: 70 }],
+      },
+    ],
+    {},
+  ).toFile(`pcascade-${sheet.toLowerCase()}-template.xlsx`);
+}
+
+function participantTemplateColumns(definitions: CustomFieldDefinition[]) {
+  return [
     ...BUILTIN_PARTICIPANT_FIELDS.map((field) => ({ name: field.column, required: field.required, accepts: field.key === "eligible" ? "yes or no (blank means yes)" : `Text, up to ${field.maxLength} characters` })),
     { name: "photo_filename", required: false, accepts: "File name of the photo inside the ZIP file, for example EMP-001.jpg" },
     ...definitions.map((definition) => ({
@@ -54,25 +111,12 @@ async function downloadTemplate(definitions: CustomFieldDefinition[]) {
             : FIELD_TYPE_LABELS[definition.type],
     })),
   ];
-  await writeXlsxFile(
-    [
-      { sheet: "Participants", data: [columns.map((column) => ({ value: column.name, fontWeight: "bold" as const }))], columns: columns.map(() => ({ width: 22 })), stickyRowsCount: 1 },
-      {
-        sheet: "Instructions",
-        data: [
-          [{ value: "Column", fontWeight: "bold" as const }, { value: "Required", fontWeight: "bold" as const }, { value: "Accepted values", fontWeight: "bold" as const }],
-          ...columns.map((column) => [{ value: column.name }, { value: column.required ? "Yes" : "No" }, { value: column.accepts }]),
-        ],
-        columns: [{ width: 22 }, { width: 10 }, { width: 70 }],
-      },
-    ],
-    {},
-  ).toFile("pcascade-participants-template.xlsx");
 }
 
-export function ImportWizard({ eventId, definitions }: Props) {
+export function ImportWizard({ eventId, kind, definitions, categories }: Props) {
   const router = useRouter();
-  const targets = useMemo(() => participantTargets(definitions), [definitions]);
+  const copy = COPY[kind];
+  const targets = useMemo(() => (kind === "PRIZES" ? prizeTargets() : participantTargets(definitions)), [kind, definitions]);
   const [sheetFile, setSheetFile] = useState<File | null>(null);
   const [parsed, setParsed] = useState<ParsedSheet | null>(null);
   const [fileSha, setFileSha] = useState("");
@@ -85,11 +129,23 @@ export function ImportWizard({ eventId, definitions }: Props) {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [failures, setFailures] = useState<{ batchId: string; items: PhotoFailure[] } | null>(null);
 
-  const normalized = useMemo(() => (parsed ? parsed.rows.map((row) => normalizeRow(row, mapping, definitions)) : []), [parsed, mapping, definitions]);
+  const normalized = useMemo((): CheckedRow[] => {
+    if (!parsed) return [];
+    if (kind === "PRIZES") {
+      return parsed.rows.map((row) => {
+        const result = normalizePrizeRow(row, mapping, categories);
+        return { rowNumber: result.rowNumber, photoRef: result.photoRef, key: result.draft?.code ?? "", errors: result.errors };
+      });
+    }
+    return parsed.rows.map((row) => {
+      const result = normalizeRow(row, mapping, definitions);
+      return { rowNumber: result.rowNumber, photoRef: result.photoRef, key: result.draft?.externalId ?? "", errors: result.errors };
+    });
+  }, [parsed, mapping, definitions, categories, kind]);
   const problems = useMemo(() => mappingProblems(mapping, targets), [mapping, targets]);
   const invalidRows = normalized.filter((row) => row.errors.length > 0);
   const matches = useMemo(
-    () => (zip ? matchPhotos(normalized.map((row) => ({ rowNumber: row.rowNumber, photoRef: row.photoRef, externalId: row.draft?.externalId ?? "" })), zip.photos, rule) : []),
+    () => (zip ? matchPhotos(normalized.map((row) => ({ rowNumber: row.rowNumber, photoRef: row.photoRef, externalId: row.key })), zip.photos, rule) : []),
     [zip, normalized, rule],
   );
   const matchCounts = {
@@ -109,7 +165,7 @@ export function ImportWizard({ eventId, definitions }: Props) {
       setSheetFile(file);
       setParsed(result);
       setFileSha(await sha256Hex(await file.arrayBuffer()));
-      setMapping(suggestMapping(result.headers, definitions));
+      setMapping(kind === "PRIZES" ? suggestPrizeMapping(result.headers) : suggestMapping(result.headers, definitions));
     } catch (problem) {
       setParsed(null);
       setError({ message: problem instanceof Error ? problem.message : "The spreadsheet could not be read." });
@@ -139,6 +195,7 @@ export function ImportWizard({ eventId, definitions }: Props) {
     if (!parsed || !sheetFile) return;
     setError(null);
     const started = await startImportAction(eventId, {
+      kind,
       fileName: sheetFile.name,
       fileSha256: fileSha,
       sheetName: parsed.sheetName,
@@ -184,7 +241,7 @@ export function ImportWizard({ eventId, definitions }: Props) {
           const photo = job.entryName ? byName.get(job.entryName) : undefined;
           if (photo) {
             try {
-              const webp = await prepareWebpPhoto(new Blob([new Uint8Array(photo.data)]));
+              const webp = await prepareWebpPhoto(new Blob([new Uint8Array(photo.data)]), kind === "PRIZES" ? PRIZE_PHOTO_MAX_SIDE : STORED_PHOTO_MAX_SIDE);
               const data = new FormData();
               data.set("rowNumber", String(job.rowNumber));
               data.set("name", photo.name);
@@ -265,13 +322,13 @@ export function ImportWizard({ eventId, definitions }: Props) {
             <h2 className="font-semibold">1. Files</h2>
             <p className="text-sm text-muted-foreground">Files are read in your browser. Only the rows and resized photos are sent.</p>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => void downloadTemplate(definitions)}>
+          <Button type="button" variant="outline" size="sm" onClick={() => void downloadTemplate(kind, definitions, categories)}>
             Download Excel template
           </Button>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-2">
-            <Label htmlFor="sheet">Participant list (.xlsx or .csv)</Label>
+            <Label htmlFor="sheet">{copy.file}</Label>
             <input id="sheet" type="file" accept=".xlsx,.csv" disabled={running} onChange={(event) => void chooseSpreadsheet(event.target.files?.[0])} className="text-sm" />
           </div>
           <div className="grid gap-2">
@@ -304,7 +361,7 @@ export function ImportWizard({ eventId, definitions }: Props) {
         ) : null}
         {zip ? (
           <p className="text-sm">
-            {zip.photos.length} photos found in the ZIP file{zip.skipped.length > 0 ? `; ${zip.skipped.length} files ignored (${[...new Set(zip.skipped.map((item) => item.reason))].join(", ")})` : ""}.
+            {zip.photos.length} {zip.photos.length === 1 ? "photo" : "photos"} found in the ZIP file{zip.skipped.length > 0 ? `; ${zip.skipped.length} ${zip.skipped.length === 1 ? "file" : "files"} ignored (${[...new Set(zip.skipped.map((item) => item.reason))].join(", ")})` : ""}.
           </p>
         ) : null}
       </section>
@@ -357,12 +414,18 @@ export function ImportWizard({ eventId, definitions }: Props) {
           ) : null}
 
           <fieldset className="grid gap-2">
-            <legend className="text-sm font-medium">When an employee ID is already registered</legend>
+            <legend className="text-sm font-medium">{copy.duplicate}</legend>
             {(
               [
                 ["REJECT", "Treat it as an error", "The row is not imported and is listed as an error."],
-                ["SKIP", "Skip it", "The existing participant is left unchanged."],
-                ["UPDATE", "Update the participant", "Values from the file replace the stored ones. The previous values are kept so the import can be reverted."],
+                ["SKIP", "Skip it", copy.skipHint],
+                [
+                  "UPDATE",
+                  copy.updateLabel,
+                  kind === "PRIZES"
+                    ? "Values from the mapped columns replace the stored ones; columns you do not map are left as they are. The previous values are kept so the import can be reverted."
+                    : "Values from the file replace the stored ones. The previous values are kept so the import can be reverted.",
+                ],
               ] as const
             ).map(([value, label, hint]) => (
               <label key={value} className="flex items-start gap-2 text-sm">
@@ -383,11 +446,11 @@ export function ImportWizard({ eventId, definitions }: Props) {
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input type="radio" checked={rule.match === "EMPLOYEE_ID"} onChange={() => setRule((current) => ({ ...current, match: "EMPLOYEE_ID" }))} disabled={running} />
-                Employee ID (photo named like EMP-001.jpg)
+                {copy.matchByKey}
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={rule.required} onChange={(event) => setRule((current) => ({ ...current, required: event.target.checked }))} disabled={running} />
-                Every participant must have a photo
+                {copy.requirePhoto}
               </label>
               <p className="text-sm text-muted-foreground">
                 {matchCounts.matched} matched · {matchCounts.missing} without a photo · {matchCounts.shared} sharing a photo · {matchCounts.ambiguous} with more than one match
@@ -411,7 +474,7 @@ export function ImportWizard({ eventId, definitions }: Props) {
             {problems.length === 0 ? (
               <>
                 Quick check: {parsed.rows.length - invalidRows.length} rows look valid, {invalidRows.length} have problems. The server repeats every check, adds
-                duplicate detection against registered participants, and shows the full preview before anything is saved.
+                duplicate detection against {copy.against}, and shows the full preview before anything is saved.
               </>
             ) : (
               "Fix the column mapping to continue."

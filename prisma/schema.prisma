@@ -247,7 +247,8 @@ model ImportRow {
   warnings      Json             @default("[]")
   action        ImportRowAction?
   participantId String?          @map("participant_id") @db.Uuid
-  photoRef      String?          @map("photo_ref")
+  prizeId       String?          @map("prize_id") @db.Uuid
+  photoRef     String?          @map("photo_ref")
   photoAssetId  String?          @map("photo_asset_id") @db.Uuid
   beforeImage   Json?            @map("before_image")
   batch         ImportBatch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
