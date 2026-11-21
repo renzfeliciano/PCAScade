@@ -39,7 +39,7 @@ Times are seconds from the start of the scene (after the countdown). Durations m
 | 0.0–2.0 | A cast-in-place concrete wall with formwork tie holes, floodlit at night, light haze. | Low tracking shot along the wall. |
 | 2.0–3.6 | Accent light traces the outline of one panel-sized section. | Track slows and turns square to the section. |
 | 3.6–5.6 | The section splits down the middle; the halves slide apart like concealed doors; dust bursts out and debris falls. | Slight shake, steady push in. |
-| 5.6–8.0 | Light pours from behind the wall; the winner overlay emerges from the opening. | Camera passes into the opening and holds. |
+| 5.6–8.0 | Light pours from behind the wall across the ground; the winner overlay emerges from the opening. | Camera pushes up to the opening, framing the lit doorway, and holds. (Passing all the way through was tried and dropped: inside, the light flattened into a single panel behind the card.) |
 
 ### 3. The Big Lift (major prizes, 9 s)
 

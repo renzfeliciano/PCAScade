@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 export const SCENES = [
-  { key: "brick-by-brick", label: "Brick by Brick", hint: "Quick reveal for minor prizes. Bricks stack up into the winner's name." },
-  { key: "build-it-up", label: "Build It Up", hint: "Scaffolding rises floor by floor. Suits mid-tier prizes." },
+  { key: "brick-by-brick", label: "Brick by Brick", hint: "Quick reveal for minor prizes. One brick slides out of a wall to show the winner." },
+  { key: "build-it-up", label: "Build It Up", hint: "A floodlit concrete wall splits open and light pours out. Suits mid-tier prizes." },
   { key: "big-lift", label: "The Big Lift", hint: "A tower crane lifts the winner into view. Suits major prizes." },
   { key: "grand-finale", label: "The Grand Finale", hint: "The whole site lights up. Reserved for the grand prize." },
 ] as const;
