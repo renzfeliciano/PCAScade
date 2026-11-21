@@ -49,3 +49,9 @@ Sign in at `/admin/login`.
 - [Phase 2B report](docs/phases/phase-2b-report.md)
 - [Phase 3 report](docs/phases/phase-3-report.md)
 - [Phase 4 report](docs/phases/phase-4-report.md)
+- [Phase 5 report](docs/phases/phase-5-report.md)
+- [Reveal scenes and sound: creative direction](docs/creative/phase-5-direction.md)
+
+## Reveal scenes
+
+`/admin/animations` previews the four reveal scenes with a live frame-rate counter, lets you pin a quality tier on the PC you are using, and plays the sound. On the presentation display, `?quality=high|standard|low` overrides the automatic tier, and the "Turn sound on" button next to "Enter full screen" enables sound on that PC.
