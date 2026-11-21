@@ -12,7 +12,7 @@ export function PlaceholderReveal({ winner, prize, elapsedMs, durationMs }: Scen
   const open = Math.max(0, (progress - BUILD_SHARE) / (1 - BUILD_SHARE));
 
   return (
-    <div data-testid="reveal-scene" data-progress={progress.toFixed(2)} className="relative flex flex-1 items-center justify-center overflow-hidden">
+    <div className="relative flex flex-1 items-center justify-center overflow-hidden">
       <div
         aria-hidden="true"
         className="grid w-[min(80vw,140vh)] gap-[0.5vh]"

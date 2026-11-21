@@ -1,6 +1,7 @@
 import type { PublicPerson } from "@/modules/presentation/domain/display";
 
 export type SceneQuality = "high" | "standard" | "low";
+export type QualityChoice = SceneQuality | "auto";
 
 export type SceneProps = {
   winner: PublicPerson;

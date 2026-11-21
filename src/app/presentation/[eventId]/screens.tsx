@@ -3,7 +3,8 @@
 import { formatEventDate } from "@/components/brand/event-accent";
 import { revealClock } from "@/modules/presentation/domain/timeline";
 import type { PresentationPrize, PublicWinner } from "@/modules/presentation/domain/state-types";
-import { RevealScene } from "@/scenes/registry";
+import { useEffect } from "react";
+import { RevealScene, preloadRevealScenes } from "@/scenes/registry";
 import { WinnerCard } from "@/scenes/winner-card";
 import { useServerNow, useStage } from "./stage-provider";
 
@@ -101,6 +102,10 @@ export function DrawScreen({ prizeId }: { prizeId: string }) {
   const { state } = useStage();
   const now = useServerNow();
   const prize = state.prizes.find((entry) => entry.id === prizeId);
+  const phase = state.current?.prizeId === prizeId ? state.current.phase : "IDLE";
+  useEffect(() => {
+    if (phase !== "IDLE") preloadRevealScenes();
+  }, [phase]);
   if (!prize) {
     return (
       <Frame testId="screen-draw-missing">
@@ -122,24 +127,26 @@ export function DrawScreen({ prizeId }: { prizeId: string }) {
   } else if (current?.phase === "REVEALING" && current.winner) {
     if (!clock) {
       body = <PrizeIntro prize={prize} note="The winner is locked in. Get ready." />;
-    } else if (clock.stage === "countdown") {
+    } else if (clock.stage === "countdown" || clock.stage === "scene") {
       body = (
-        <div className="flex flex-col items-center gap-[2vh] text-center" data-testid="reveal-countdown">
-          <p className={eyebrow}>{prize.name}</p>
-          <p className="text-[clamp(8rem,28vw,30rem)] leading-none font-extrabold text-event-accent-ink tabular-nums">{Math.ceil(clock.countdownLeftMs / 1000)}</p>
+        <div className="relative flex w-full flex-1 self-stretch">
+          <RevealScene
+            sceneKey={prize.sceneKey}
+            winner={current.winner}
+            prize={{ name: prize.name, categoryName: prize.categoryName }}
+            accent={state.event.accent}
+            quality="auto"
+            preloading={clock.stage === "countdown"}
+            elapsedMs={clock.sceneElapsedMs}
+            durationMs={current.sceneMs}
+          />
+          {clock.stage === "countdown" ? (
+            <div data-testid="reveal-countdown" className="absolute inset-0 flex flex-col items-center justify-center gap-[2vh] bg-background/70 text-center">
+              <p className={eyebrow}>{prize.name}</p>
+              <p className="text-[clamp(8rem,28vw,30rem)] leading-none font-extrabold text-event-accent-ink tabular-nums">{Math.ceil(clock.countdownLeftMs / 1000)}</p>
+            </div>
+          ) : null}
         </div>
-      );
-    } else if (clock.stage === "scene") {
-      body = (
-        <RevealScene
-          sceneKey={prize.sceneKey}
-          winner={current.winner}
-          prize={{ name: prize.name, categoryName: prize.categoryName }}
-          accent={state.event.accent}
-          quality="standard"
-          elapsedMs={clock.sceneElapsedMs}
-          durationMs={current.sceneMs}
-        />
       );
     } else {
       body = (
@@ -153,7 +160,7 @@ export function DrawScreen({ prizeId }: { prizeId: string }) {
   }
 
   return (
-    <main data-testid="screen-draw" data-phase={current?.phase ?? "IDLE"} data-stage={clock?.stage ?? ""} className="flex flex-1 flex-col items-center justify-center gap-[4vh] px-[6vw] pb-[6vh]">
+    <main data-testid="screen-draw" data-phase={current?.phase ?? "IDLE"} data-stage={clock?.stage ?? ""} className={`flex flex-1 flex-col items-center justify-center gap-[4vh] ${clock && clock.stage !== "revealed" ? "" : "px-[6vw] pb-[6vh]"}`}>
       {body}
       {clock?.stage === "revealed" || !clock ? <WinnerChips winners={shownWinners} /> : null}
     </main>
