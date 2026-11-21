@@ -56,9 +56,11 @@ The sky is a gradient dome painted in code rather than the HDRI shown as a backd
 
 | Time | Picture | Camera |
 |---|---|---|
-| 0.0–6.0 | A tower rises floor by floor in time lapse: columns, slabs, glazing, two cranes climbing with it. | Wide orbit around the site, rising with the build. |
-| 6.0–8.5 | Site floodlights come on; the top floors' façade lights up in the event accent. | Orbit slows, camera climbs to the crown. |
-| 8.5–11.0 | Light bursts from the crown; the winner overlay appears. | Holds on the crown. |
+| 0.0–6.0 | A tower rises floor by floor in time lapse: columns, slabs, glazing, two cranes climbing with it. Dusk turns to night; welding sparks flicker on the working floor and office lights switch on below. | Wide orbit around the site, rising with the build. |
+| 6.0–8.5 | Site floodlights come on; the top three floors' glazing lights up in the event accent and the steel crown on the roof begins to glow. | Orbit slows, camera climbs level with the roof. |
+| 8.5–11.0 | Light bursts from the crown's spire with a flare and sparks; the winner overlay appears. | Holds on the lit top floors and crown. |
+
+The tower has 24, 18 or 10 floors on the high, standard and low tiers; the camera framing is computed from the tower height, so every tier ends on the same composition.
 
 ## Quality tiers and budgets
 
