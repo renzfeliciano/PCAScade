@@ -4,6 +4,7 @@ import { BrandLockup } from "@/components/brand/brand-mark";
 import { accentStyle } from "@/components/brand/event-accent";
 import { db } from "@/lib/db";
 import { presentationState } from "@/modules/presentation/server/state";
+import { SoundButton } from "@/scenes/audio/sound-button";
 import { FullscreenButton } from "../fullscreen-button";
 import { ConnectionBadge, StageProvider } from "./stage-provider";
 
@@ -31,7 +32,10 @@ export default async function PresentationEventLayout({ params, children }: Layo
       <div className="h-3 bg-[repeating-linear-gradient(-45deg,var(--event-accent)_0_18px,oklch(0.18_0.01_250)_18px_36px)]" aria-hidden="true" />
       <header className="flex items-center justify-between px-[4vw] py-[3vh]">
         <BrandLockup />
-        <FullscreenButton />
+        <div className="flex items-center gap-3">
+          <SoundButton hideInFullscreen />
+          <FullscreenButton />
+        </div>
       </header>
       <StageProvider initial={state}>
         {children}

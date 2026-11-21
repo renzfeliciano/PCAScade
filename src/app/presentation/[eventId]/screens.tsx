@@ -4,6 +4,7 @@ import { formatEventDate } from "@/components/brand/event-accent";
 import { revealClock } from "@/modules/presentation/domain/timeline";
 import type { PresentationPrize, PublicWinner } from "@/modules/presentation/domain/state-types";
 import { useEffect } from "react";
+import { useRevealSound } from "@/scenes/audio/use-reveal-sound";
 import { RevealScene, preloadRevealScenes } from "@/scenes/registry";
 import { WinnerCard } from "@/scenes/winner-card";
 import { useServerNow, useStage } from "./stage-provider";
@@ -106,6 +107,17 @@ export function DrawScreen({ prizeId }: { prizeId: string }) {
   useEffect(() => {
     if (phase !== "IDLE") preloadRevealScenes();
   }, [phase]);
+  const revealing = prize && state.current?.prizeId === prize.id && state.current.phase === "REVEALING" && state.current.drawId && now !== null ? state.current : null;
+  useRevealSound(
+    revealing && prize
+      ? {
+          key: `${revealing.drawId}:${revealing.phaseStartedAt}`,
+          sceneKey: prize.sceneKey,
+          countdownMs: revealing.countdownMs,
+          elapsedMs: (now ?? 0) - revealing.phaseStartedAt,
+        }
+      : null,
+  );
   if (!prize) {
     return (
       <Frame testId="screen-draw-missing">

@@ -62,6 +62,24 @@ The sky is a gradient dome painted in code rather than the HDRI shown as a backd
 
 The tower has 24, 18 or 10 floors on the high, standard and low tiers; the camera framing is computed from the tower height, so every tier ends on the same composition.
 
+## Sound
+
+All sound is synthesised in the browser with the Web Audio API: filtered noise for grinding, dust, wind and impacts, tuned partials for steel clanks, low glides for thumps, sawtooth motors for the crane, and a closing major chord as the winner card appears (a fuller voicing for the Grand Finale). There are no audio files, so there is nothing to license or download.
+
+| Scene | Cues |
+|---|---|
+| Countdown | A tick each second, higher on the last |
+| Brick by Brick | Room tone, a rising shimmer as the joints glow, three grinding jolts, chips, the brick landing, a swell, the chord |
+| Build It Up | Floodlight hum, an electric buzz along the traced outline, the crack, the doors grinding open, falling debris, the chord |
+| The Big Lift | Wind, the trolley motor, lift-off, the winch, a clank as the load turns, five panel clanks, two floodlight switches, the chord |
+| The Grand Finale | A rising drone with time-lapse hammering, welding crackle, four floodlight switches, a swell to the crown, the burst, sparkles, the full chord |
+
+Rules:
+
+- Sound follows the same server clock as the picture. If the display joins or reloads during a reveal, only the cues still to come are played, and long sounds such as hums pick up part way through. A countdown tick that arrives up to 0.9 s late still plays, because the display only learns of the reveal on its next poll.
+- Browsers only allow sound after someone clicks or presses a key on the page. The display has a "Turn sound on" button next to "Enter full screen". The choice is remembered on that PC; after a reload the button reads "Click to resume sound" and any click or key press on the display brings it back. The button hides in full screen once sound is on.
+- Sound is off until someone turns it on, and turning it off stops everything at once. The scene preview page has the same button, so cues can be checked against the picture.
+
 ## Quality tiers and budgets
 
 | | High | Standard | Low |

@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { EVENT_ACCENTS } from "@/modules/events/domain/event-rules";
 import { sceneDurationMs } from "@/modules/presentation/domain/timeline";
 import { SCENES } from "@/modules/prizes/domain/prizes";
+import { SoundButton } from "@/scenes/audio/sound-button";
+import { useRevealSound } from "@/scenes/audio/use-reveal-sound";
 import { QUALITY_LEVELS, pinQuality, probeWebGl, readPinnedQuality, tierFromRenderer } from "@/scenes/quality";
 import { RevealScene } from "@/scenes/registry";
 import type { QualityChoice, SceneQuality } from "@/scenes/types";
@@ -24,6 +26,7 @@ export function ScenePreview() {
   const [device, setDevice] = useState<{ renderer: string; detected: SceneQuality; pinned: SceneQuality | null } | null>(null);
   const [runId, setRunId] = useState(0);
   const [scrub, setScrub] = useState<number | null>(null);
+  const [cycle, setCycle] = useState(0);
   const durationMs = sceneDurationMs(sceneKey);
   const frameTimes = useRef<number[]>([]);
 
@@ -39,8 +42,10 @@ export function ScenePreview() {
     if (scrub !== null) return;
     const started = performance.now();
     const timer = window.setInterval(() => {
-      const passed = (performance.now() - started) % (durationMs + PAUSE_AFTER_MS);
+      const total = performance.now() - started;
+      const passed = total % (durationMs + PAUSE_AFTER_MS);
       setElapsed(Math.min(durationMs, passed));
+      setCycle(Math.floor(total / (durationMs + PAUSE_AFTER_MS)));
     }, 100);
     return () => window.clearInterval(timer);
   }, [durationMs, runId, scrub]);
@@ -67,14 +72,27 @@ export function ScenePreview() {
     return () => cancelAnimationFrame(frame);
   }, [sceneKey, quality, runId]);
 
+  function restart() {
+    setScrub(null);
+    setElapsed(0);
+    setCycle(0);
+    setRunId((value) => value + 1);
+  }
+
   const activeQuality: SceneQuality = quality === "auto" ? (device?.pinned ?? device?.detected ?? "standard") : quality;
+  useRevealSound(scrub === null ? { key: `${sceneKey}:${runId}:${cycle}`, sceneKey, countdownMs: 0, elapsedMs: elapsed } : null);
 
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-end gap-3">
         <label className="grid gap-1 text-sm">
           <span className="font-medium">Scene</span>
-          <select value={sceneKey} onChange={(event) => setSceneKey(event.target.value)} className="h-9 rounded-md border border-border bg-background px-2">
+          <select
+            value={sceneKey}
+            onChange={(event) => {
+              setSceneKey(event.target.value);
+              restart();
+            }} className="h-9 rounded-md border border-border bg-background px-2">
             {SCENES.map((scene) => (
               <option key={scene.key} value={scene.key}>
                 {scene.label}
@@ -106,13 +124,11 @@ export function ScenePreview() {
         <Button
           type="button"
           variant="outline"
-          onClick={() => {
-            setScrub(null);
-            setRunId((value) => value + 1);
-          }}
+          onClick={restart}
         >
           {scrub === null ? "Restart" : "Play"}
         </Button>
+        <SoundButton className="h-9 rounded-md border border-border bg-background px-3 text-sm font-medium" />
         <label className="grid min-w-56 flex-1 gap-1 text-sm">
           <span className="font-medium">Pause at {((scrub ?? elapsed) / 1000).toFixed(1)} s</span>
           <input
